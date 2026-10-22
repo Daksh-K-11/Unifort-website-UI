@@ -46,9 +46,28 @@ export function BagProvider({ children }: { children: React.ReactNode }) {
   // Load from localStorage on mount
   useEffect(() => {
     try {
-      const stored = localStorage.getItem('unifort_bag_v1')
+      const stored = localStorage.getItem('unifort_bag_v2') || localStorage.getItem('unifort_bag_v1')
       if (stored) {
-        setItems(JSON.parse(stored))
+        const parsed = JSON.parse(stored)
+        const imageMap: Record<string, string> = {
+          'No. 01 Obsidian Plate': '/unifort-plate-light.jpg',
+          'No. 04 Violet Tumbler': '/unifort-tumbler-light.jpg',
+          'No. 07 Arc Carafe': '/unifort-carafe-light.jpg',
+          'No. 12 Basalt Bowl': '/unifort-bowl-light.jpg',
+        }
+        const updated = parsed.map((item: BagItem) => {
+          if (imageMap[item.product.name]) {
+            return {
+              ...item,
+              product: {
+                ...item.product,
+                image: imageMap[item.product.name],
+              },
+            }
+          }
+          return item
+        })
+        setItems(updated)
       }
     } catch (e) {
       console.error('Failed to load bag from localStorage', e)
@@ -60,7 +79,7 @@ export function BagProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (isLoaded) {
       try {
-        localStorage.setItem('unifort_bag_v1', JSON.stringify(items))
+        localStorage.setItem('unifort_bag_v2', JSON.stringify(items))
       } catch (e) {
         console.error('Failed to save bag to localStorage', e)
       }

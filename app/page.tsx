@@ -4,16 +4,43 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { Suspense, useEffect, useState } from 'react'
-import { ArrowUpRight, ChevronDown, Menu, Minus, Plus, Sparkles, X } from 'lucide-react'
+import { ArrowUpRight, ChevronDown, ChevronLeft, ChevronRight, Menu, Minus, Plus, Sparkles, X } from 'lucide-react'
 import { BagProvider, useBag } from '@/lib/bag-context'
 import { BagDrawer } from '@/components/BagDrawer'
 import { BagToast } from '@/components/BagToast'
 
 const products = [
-  { name: 'No. 01 Obsidian Plate', type: 'Dinner plate · 28 cm', price: '₹84', image: '/unifort-collection.png', category: 'Table' },
-  { name: 'No. 04 Violet Tumbler', type: 'Hand-blown glass · 320 ml', price: '₹62', image: '/unifort-hero.png', category: 'Glass' },
-  { name: 'No. 07 Arc Carafe', type: 'Smoked glass · 1.2 L', price: '₹148', image: '/unifort-hero.png', category: 'Glass' },
-  { name: 'No. 12 Basalt Bowl', type: 'Stoneware · 22 cm', price: '₹96', image: '/unifort-atelier.png', category: 'Table' },
+  { name: 'No. 01 Obsidian Plate', type: 'Dinner plate · 28 cm', price: '₹84', image: '/unifort-plate-light.jpg', category: 'Table' },
+  { name: 'No. 04 Violet Tumbler', type: 'Hand-blown glass · 320 ml', price: '₹62', image: '/unifort-tumbler-light.jpg', category: 'Glass' },
+  { name: 'No. 07 Arc Carafe', type: 'Smoked glass · 1.2 L', price: '₹148', image: '/unifort-carafe-light.jpg', category: 'Glass' },
+  { name: 'No. 12 Basalt Bowl', type: 'Stoneware · 22 cm', price: '₹96', image: '/unifort-bowl-light.jpg', category: 'Table' },
+]
+
+const craftSlides = [
+  {
+    image: '/unifort-craft-glaze.jpg',
+    tag: 'Craft & Atelier',
+    title: 'Mineral-rich glazes that catch daylight.',
+    desc: 'Each piece undergoes a 1280°C reduction firing, fusing volcanic ash and slate minerals into an impervious, satiny surface that deepens with age.',
+    ctaText: 'Explore our stoneware',
+    ctaHref: '/collection?piece=No.%2001%20Obsidian%20Plate',
+  },
+  {
+    image: '/unifort-table-setting.jpg',
+    tag: 'Living Space',
+    title: 'Designed for the warmth of gathering.',
+    desc: 'Proportions calibrated to sit naturally alongside linen, candles, and silverware. Tableware that elevates casual breakfasts and 14-person banquets alike.',
+    ctaText: 'View the table edit',
+    ctaHref: '/collection',
+  },
+  {
+    image: '/unifort-atelier-light.jpg',
+    tag: 'Artisan Heritage',
+    title: 'Human touch in every contour.',
+    desc: 'Small-batch production in our Chennai atelier preserves the distinct micro-variations that make every tumbler, bowl, and plate truly singular.',
+    ctaText: 'Read our story',
+    ctaHref: '/about',
+  },
 ]
 
 function Header() {
@@ -23,8 +50,8 @@ function Header() {
 
   return (
     <header className="site-header">
-      <Link href="/" className="wordmark" onClick={() => setOpen(false)}>
-        UNIFORT<span>®</span>
+      <Link href="/" className="brand-link" onClick={() => setOpen(false)} aria-label="UNIFORT Home">
+        <Image src="/logo.svg" alt="UNIFORT — The Art of Dining" width={138} height={37} priority className="brand-logo-img" />
       </Link>
       <nav className={open ? 'nav-links open' : 'nav-links'}>
         <Link className={pathname === '/' ? 'active' : ''} href="/" onClick={() => setOpen(false)}>
@@ -32,6 +59,9 @@ function Header() {
         </Link>
         <Link className={pathname === '/collection' ? 'active' : ''} href="/collection" onClick={() => setOpen(false)}>
           Collection
+        </Link>
+        <Link className={pathname === '/about' ? 'active' : ''} href="/about" onClick={() => setOpen(false)}>
+          About
         </Link>
         <Link className={pathname === '/contact' ? 'active' : ''} href="/contact" onClick={() => setOpen(false)}>
           Contact
@@ -56,22 +86,23 @@ function Header() {
 function Footer() {
   return (
     <footer className="footer">
-      <div>
-        <div className="wordmark">
-          UNIFORT<span>®</span>
-        </div>
+      <div className="footer-brand">
+        <Link href="/" className="brand-link" aria-label="UNIFORT Home">
+          <Image src="/logo.svg" alt="UNIFORT — The Art of Dining" width={138} height={37} className="brand-logo-img" />
+        </Link>
         <p className="muted">Objects for considered living.</p>
       </div>
       <div className="footer-grid">
         <div>
           <span className="eyebrow">Explore</span>
           <Link href="/collection">Collection</Link>
+          <Link href="/about">About UNIFORT</Link>
           <Link href="/contact">Contact studio</Link>
         </div>
         <div>
           <span className="eyebrow">Contact</span>
           <a href="mailto:studio@unifort.co">studio@unifort.co</a>
-          <span>Paris · Copenhagen</span>
+          <span>Chennai · India</span>
         </div>
       </div>
       <div className="footer-bottom">
@@ -111,6 +142,70 @@ function Button({
   )
 }
 
+function CraftCarousel() {
+  const [active, setActive] = useState(0)
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setActive((prev) => (prev + 1) % craftSlides.length)
+    }, 6000)
+    return () => clearInterval(timer)
+  }, [])
+
+  const next = () => setActive((prev) => (prev + 1) % craftSlides.length)
+  const prev = () => setActive((prev) => (prev - 1 + craftSlides.length) % craftSlides.length)
+
+  return (
+    <section className="craft-carousel-section">
+      <div className="craft-carousel-head">
+        <div>
+          <span className="eyebrow">The Atelier Process</span>
+          <h2 className="display display-medium">
+            From the kiln to <em>your table.</em>
+          </h2>
+        </div>
+        <div className="carousel-nav-buttons">
+          <button className="carousel-btn" onClick={prev} aria-label="Previous story slide">
+            <ChevronLeft size={20} />
+          </button>
+          <button className="carousel-btn" onClick={next} aria-label="Next story slide">
+            <ChevronRight size={20} />
+          </button>
+        </div>
+      </div>
+
+      <div className="carousel-viewport">
+        {craftSlides.map((slide, idx) => (
+          <div key={idx} className={`carousel-slide ${idx === active ? 'active' : ''}`}>
+            <div className="carousel-slide-bg">
+              <Image src={slide.image} alt={slide.title} fill sizes="100vw" priority={idx === 0} />
+            </div>
+            <div className="carousel-slide-overlay" />
+            <div className="carousel-slide-content">
+              <span className="eyebrow">{slide.tag}</span>
+              <h3>{slide.title}</h3>
+              <p>{slide.desc}</p>
+              <Button href={slide.ctaHref} outline>
+                {slide.ctaText}
+              </Button>
+            </div>
+          </div>
+        ))}
+        <div className="carousel-dots">
+          {craftSlides.map((_, idx) => (
+            <button
+              key={idx}
+              className={`carousel-dot ${idx === active ? 'active' : ''}`}
+              onClick={() => setActive(idx)}
+              aria-label={`Go to slide ${idx + 1}`}
+            />
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
 function Home() {
   return (
     <>
@@ -118,8 +213,8 @@ function Home() {
         <section className="hero">
           <div className="hero-image">
             <Image
-              src="/unifort-hero.png"
-              alt="UNIFORT black tableware illuminated by violet light"
+              src="/unifort-hero-light.jpg"
+              alt="UNIFORT tableware setting illuminated by warm natural daylight"
               fill
               priority
               sizes="100vw"
@@ -136,26 +231,27 @@ function Home() {
             <p className="hero-intro reveal delay-2">
               Objects of quiet confidence, made to make the everyday feel rare.
             </p>
-            <div className="reveal delay-3">
+            <div className="reveal delay-3" style={{ display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
               <Button href="/collection">Explore the collection</Button>
+              <Button href="/about" outline>Our story</Button>
             </div>
           </div>
-          <div className="hero-index">
-            01 <span>/</span> 03
-          </div>
-          <div className="hero-note">
-            <Sparkles />{' '}
-            <span>
-              Hand-finished
-              <br />
-              in small editions
-            </span>
-          </div>
+
         </section>
+
+        {/* Editorial block with image thumbnail replacing the word "Manifesto" */}
         <section className="manifesto section-pad">
-          <div className="section-label">
-            <span>01</span>
-            <span>Manifesto</span>
+          <div className="manifesto-thumb-wrap">
+            <div className="manifesto-thumb">
+              <Image
+                src="/unifort-craft-glaze.jpg"
+                alt="Handcrafting ceramic tableware in Chennai studio"
+                fill
+                sizes="220px"
+                className="manifesto-thumb-img"
+              />
+            </div>
+            <span className="manifesto-thumb-caption">Studio Chennai</span>
           </div>
           <div className="manifesto-content">
             <p className="display display-small">
@@ -163,16 +259,17 @@ function Home() {
             </p>
             <div className="manifesto-foot">
               <span className="muted">
-                Designed in Copenhagen
+                Studio & Kilns
                 <br />
-                Made across Europe
+                Chennai, India
               </span>
-              <Button href="/contact" outline>
-                Visit the studio
+              <Button href="/about" outline>
+                Discover the studio
               </Button>
             </div>
           </div>
         </section>
+
         <section className="featured section-pad">
           <div className="section-heading">
             <div>
@@ -193,13 +290,19 @@ function Home() {
             ))}
           </div>
         </section>
+
+        <CraftCarousel />
+
         <section className="statement">
           <div className="statement-orb" />
           <span className="eyebrow">A table is a stage</span>
           <p className="display display-small">
             Bring your own <em>occasion.</em>
           </p>
-          <Button href="/collection">Set the table</Button>
+          <div className="cta-actions">
+            <Button href="/collection">Set the table</Button>
+            <Button href="/about" outline>Our story</Button>
+          </div>
         </section>
       </main>
       <Footer />
@@ -212,7 +315,7 @@ function ProductCard({ product, index }: { product: typeof products[number]; ind
     <Link href={`/collection?piece=${encodeURIComponent(product.name)}`} className="product-card">
       <div className="product-image">
         <Image src={product.image} alt={product.name} fill sizes="(max-width: 768px) 90vw, 30vw" />
-        <span className="product-number">0{index + 1}</span>
+        <span className="product-number">{product.category}</span>
         <span className="quick-view">
           View piece <ArrowUpRight />
         </span>
@@ -254,18 +357,19 @@ function Collection() {
   return (
     <>
       <main className="page">
+        {/* Cohesive stacked hero header on desktop */}
         <section className="collection-intro section-pad">
-          <div>
+          <div className="page-intro-header">
             <span className="eyebrow">The collection · 2026</span>
             <h1 className="display">
               Objects for
               <br />
               <em>the long table.</em>
             </h1>
+            <p className="intro-copy">
+              A considered vocabulary of forms, textures, and shadows. Each piece is designed to be used, touched, and kept. Handcrafted in small editions in Chennai, India.
+            </p>
           </div>
-          <p className="intro-copy">
-            A considered vocabulary of forms, textures, and shadows. Each piece is designed to be used, touched, and kept.
-          </p>
         </section>
         <section className="catalog section-pad">
           <div className="filter-bar">
@@ -290,7 +394,7 @@ function Collection() {
         </section>
         <section className="ritual-strip">
           <div className="ritual-image">
-            <Image src="/unifort-collection.png" alt="UNIFORT collection details" fill sizes="50vw" />
+            <Image src="/unifort-collection-light.jpg" alt="UNIFORT stacked tableware collection in natural light" fill sizes="50vw" />
           </div>
           <div className="ritual-copy">
             <span className="eyebrow">The ritual of use</span>
@@ -347,18 +451,19 @@ function Contact() {
   return (
     <>
       <main className="page contact-page">
+        {/* Cohesive stacked hero header on desktop */}
         <section className="contact-intro section-pad">
-          <div>
-            <span className="eyebrow">Contact / 03</span>
+          <div className="page-intro-header">
+            <span className="eyebrow">Studio & Inquiries</span>
             <h1 className="display">
               Let&apos;s make
               <br />
               <em>room.</em>
             </h1>
+            <p className="intro-copy">
+              For commissions, stockists, hospitality projects, or simply a note about the pieces you live with. Handcrafted with care in Chennai, India.
+            </p>
           </div>
-          <p className="intro-copy">
-            For commissions, stockists, hospitality projects, or simply a note about the pieces you live with.
-          </p>
         </section>
         <section className="contact-grid section-pad">
           <div className="contact-card glass-panel">
@@ -375,18 +480,18 @@ function Contact() {
                 <a href="mailto:studio@unifort.co">studio@unifort.co</a>
               </p>
               <p>
-                <span className="muted">Showroom</span>
+                <span className="muted">Studio & Showroom</span>
                 <br />
-                18 Rue du Temple
+                Coast Studio, East Coast Road
                 <br />
-                75004 Paris, France
+                Chennai 600041, Tamil Nadu, India
               </p>
               <p>
-                <span className="muted">Hours</span>
+                <span className="muted">Visiting Hours</span>
                 <br />
-                Tuesday — Friday
+                Tuesday — Saturday
                 <br />
-                10:00 — 18:00 CET
+                10:00 — 18:00 IST
               </p>
             </div>
           </div>
@@ -433,70 +538,145 @@ function Contact() {
   )
 }
 
-function Atelier() {
+function About() {
+  const milestones = [
+    {
+      year: '2014',
+      tag: 'Founding Conviction',
+      title: 'The First Form',
+      desc: 'A simple workshop table in Chennai. Five prototypes shaped by hand. One core conviction: that tableware deserves architectural reverence.',
+    },
+    {
+      year: '2019',
+      tag: 'Material Studies',
+      title: 'Mineral Glaze Studies',
+      desc: 'Partnering with master ceramic artisans in Tamil Nadu to formulate our signature slate-indigo and volcanic basalt patinas that mature with daily use.',
+    },
+    {
+      year: '2023',
+      tag: 'Flagship Studio',
+      title: 'Chennai Coastal Atelier',
+      desc: 'Opening our dedicated studio space along the Chennai coast, outfitting celebrated dining tables and architectural residences across India and beyond.',
+    },
+    {
+      year: '2026',
+      tag: 'The Current Epoch',
+      title: 'The Long Table',
+      desc: 'A unified permanent collection made for more people, more often, and all the unhurried moments shared between courses.',
+    },
+  ]
+
   return (
     <>
       <main className="page">
-        <section className="atelier-hero">
-          <div className="atelier-image">
-            <Image src="/unifort-atelier.png" alt="UNIFORT artisan shaping a ceramic vessel" fill priority sizes="100vw" />
-          </div>
-          <div className="atelier-hero-copy">
-            <span className="eyebrow">The atelier</span>
-            <h1 className="display">
-              Made with
-              <br />
-              <em>intention.</em>
-            </h1>
-          </div>
-        </section>
-        <section className="origin section-pad">
-          <div className="section-label">
-            <span>02</span>
-            <span>Our point of view</span>
-          </div>
-          <div className="origin-content">
-            <p className="display display-small">
-              We believe the things we live with should carry a little <em>evidence</em> of the human hand.
-            </p>
-            <p className="muted origin-body">
-              UNIFORT began with a simple question: what would happen if tableware was treated with the same care as
-              architecture? A decade later, our answer lives in the weight of a plate, the lip of a glass, the quiet drama of
-              a dark glaze.
-            </p>
-          </div>
-        </section>
-        <section className="timeline section-pad">
-          <div className="timeline-item">
-            <span>2014</span>
-            <div>
-              <h3>The first form</h3>
-              <p className="muted">A dining table in Copenhagen. Five prototypes. One conviction.</p>
+        {/* Editorial About Hero without washed out color overlay */}
+        <section className="about-hero-wrap section-pad">
+          <span className="eyebrow">About UNIFORT · Est. 2014</span>
+          <h1 className="display">
+            Objects crafted for
+            <br />
+            <em>considered living.</em>
+          </h1>
+          <p className="about-hero-intro">
+            Born from the belief that everyday objects shape our rituals, UNIFORT marries architectural clarity with the enduring artistry of master ceramicists in Chennai, India.
+          </p>
+          <div className="about-hero-image-wrap">
+            <Image
+              src="/unifort-atelier-light.jpg"
+              alt="UNIFORT master ceramicist in sunlit atelier"
+              fill
+              priority
+              sizes="(max-width: 1200px) 100vw, 1200px"
+            />
+            <div className="about-image-caption">
+              <span>Studio Chennai · Hand-finishing raw stoneware</span>
             </div>
           </div>
-          <div className="timeline-item">
-            <span>2019</span>
-            <div>
-              <h3>Material studies</h3>
-              <p className="muted">
-                We begin working with small European workshops to develop our signature obsidian glaze.
+        </section>
+
+        {/* Fully centered, symmetrical Philosophy section */}
+        <section className="origin-section section-pad">
+          <div className="origin-inner">
+            <div className="section-label origin-label">
+              <span>Our Philosophy</span>
+            </div>
+
+            <div className="origin-quote-wrap">
+              <h2 className="display display-small origin-quote">
+                We believe the things we live with should carry a little <em>evidence</em> of the human hand.
+              </h2>
+              <p className="origin-lead">
+                UNIFORT began with a simple question: what would happen if tableware was treated with the same care and permanence as
+                architecture? A decade later, our answer lives in the weight of a plate, the lip of a glass, and the quiet drama of
+                hand-finished mineral glazes handcrafted in Chennai, India.
               </p>
             </div>
-          </div>
-          <div className="timeline-item">
-            <span>2026</span>
-            <div>
-              <h3>The long table</h3>
-              <p className="muted">A collection made for more people, more often, and all the moments between.</p>
+
+            {/* Symmetrically Centered 1 2 3 Value Cards across the full width */}
+            <div className="about-values">
+              <div className="value-card glass-panel">
+                <div className="value-number-badge">01</div>
+                <h3>Architectural Rigor</h3>
+                <p>
+                  Every silhouette is engineered with disciplined proportions, calibrated rim weights, and balance calibrated for the human hand.
+                </p>
+              </div>
+              <div className="value-card glass-panel">
+                <div className="value-number-badge">02</div>
+                <h3>Enduring Materiality</h3>
+                <p>
+                  High-fire artisanal stoneware, hand-blown fluted glass, and our signature slate-indigo glazes formulated to deepen over decades.
+                </p>
+              </div>
+              <div className="value-card glass-panel">
+                <div className="value-number-badge">03</div>
+                <h3>The Long Table</h3>
+                <p>
+                  Objects designed not for glass display cabinets, but to be passed around, poured from, and gathered over for unhurried evenings.
+                </p>
+              </div>
             </div>
           </div>
         </section>
-        <section className="atelier-cta">
+
+        {/* Connected Attractive Timeline */}
+        <section className="timeline-section section-pad">
+          <div className="section-label">
+            <span>Our Journey</span>
+          </div>
+          <div style={{ textAlign: 'center', marginTop: '20px', marginBottom: '50px' }}>
+            <span className="eyebrow" style={{ display: 'block', margin: '0 auto 10px' }}>Milestones · 2014 — 2026</span>
+            <h2 className="display display-medium" style={{ margin: '0 auto' }}>
+              A decade of <em>discipline.</em>
+            </h2>
+          </div>
+          <div className="timeline-wrap">
+            <div className="timeline-track" />
+            <div className="timeline-nodes">
+              {milestones.map((m) => (
+                <div key={m.year} className="timeline-node-card">
+                  <div className="timeline-node-dot">{m.year}</div>
+                  <div className="timeline-card-content glass-panel">
+                    <span className="timeline-card-tag">{m.tag}</span>
+                    <h3>{m.title}</h3>
+                    <p>{m.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Strictly Center-Aligned CTA */}
+        <section className="atelier-cta cta-center">
           <span className="eyebrow">Made to be lived with</span>
-          <p className="display display-small">
-            Start your own <em>ritual.</em>
-          </p>
-          <Button href="/collection">Discover the pieces</Button>
+          <h2 className="display display-small">
+            Bring presence to your <em>table.</em>
+          </h2>
+          <div className="cta-actions">
+            <Button href="/collection">Explore the collection</Button>
+            <Button href="/contact" outline>Visit the studio</Button>
+          </div>
         </section>
       </main>
       <Footer />
@@ -513,6 +693,10 @@ export default function Page() {
         {pathname === '/collection' ? (
           <Suspense fallback={<main className="page route-loading" aria-label="Loading collection" />}>
             <Collection />
+          </Suspense>
+        ) : pathname === '/about' ? (
+          <Suspense fallback={<main className="page route-loading" aria-label="Loading about" />}>
+            <About />
           </Suspense>
         ) : pathname === '/contact' ? (
           <Suspense fallback={<main className="page route-loading" aria-label="Loading contact" />}>
