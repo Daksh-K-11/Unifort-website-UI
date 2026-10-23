@@ -1,5 +1,6 @@
 'use client'
 
+import dynamic from 'next/dynamic'
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
@@ -8,6 +9,24 @@ import { ArrowUpRight, ChevronDown, ChevronLeft, ChevronRight, Menu, Minus, Plus
 import { BagProvider, useBag } from '@/lib/bag-context'
 import { BagDrawer } from '@/components/BagDrawer'
 import { BagToast } from '@/components/BagToast'
+import { UnifortButton, Button } from '@/components/ui/UnifortButton'
+
+const CustomizeStudio = dynamic(
+  () => import('@/components/customize/CustomizeStudio').then((mod) => mod.CustomizeStudio),
+  {
+    ssr: false,
+    loading: () => (
+      <main className="page route-loading flex items-center justify-center min-h-[60vh]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 rounded-full border-2 border-[#424a70] border-t-transparent animate-spin" />
+          <span className="text-xs uppercase tracking-wider text-[#424a70] font-medium">
+            Loading Atelier 3D Studio...
+          </span>
+        </div>
+      </main>
+    ),
+  }
+)
 
 const products = [
   { name: 'No. 01 Obsidian Plate', type: 'Dinner plate · 28 cm', price: '₹84', image: '/unifort-plate-light.jpg', category: 'Table' },
@@ -49,37 +68,43 @@ function Header() {
   const { totalCount, setIsBagOpen } = useBag()
 
   return (
-    <header className="site-header">
-      <Link href="/" className="brand-link" onClick={() => setOpen(false)} aria-label="UNIFORT Home">
-        <Image src="/logo.svg" alt="UNIFORT — The Art of Dining" width={138} height={37} priority className="brand-logo-img" />
-      </Link>
-      <nav className={open ? 'nav-links open' : 'nav-links'}>
-        <Link className={pathname === '/' ? 'active' : ''} href="/" onClick={() => setOpen(false)}>
-          Home
+    <>
+      <header className="site-header">
+        <Link href="/" className="brand-link" onClick={() => setOpen(false)} aria-label="UNIFORT Home">
+          <Image src="/logo.svg" alt="UNIFORT — The Art of Dining" width={138} height={37} priority className="brand-logo-img" />
         </Link>
-        <Link className={pathname === '/collection' ? 'active' : ''} href="/collection" onClick={() => setOpen(false)}>
-          Collection
-        </Link>
-        <Link className={pathname === '/about' ? 'active' : ''} href="/about" onClick={() => setOpen(false)}>
-          About
-        </Link>
-        <Link className={pathname === '/contact' ? 'active' : ''} href="/contact" onClick={() => setOpen(false)}>
-          Contact
-        </Link>
-      </nav>
-      <div className="header-actions">
-        <button aria-label="Open menu" className="icon-button mobile-only" onClick={() => setOpen(!open)}>
-          {open ? <X /> : <Menu />}
-        </button>
-        <button
-          className="header-cart"
-          onClick={() => setIsBagOpen(true)}
-          aria-label={`Open shopping bag with ${totalCount} items`}
-        >
-          Bag <span>{totalCount}</span>
-        </button>
-      </div>
-    </header>
+        <nav className={open ? 'nav-links open' : 'nav-links'}>
+          <Link className={pathname === '/' ? 'active' : ''} href="/" onClick={() => setOpen(false)}>
+            Home
+          </Link>
+          <Link className={pathname === '/collection' ? 'active' : ''} href="/collection" onClick={() => setOpen(false)}>
+            Collection
+          </Link>
+          <Link className={pathname === '/customize' ? 'active' : ''} href="/customize" onClick={() => setOpen(false)}>
+            Customize
+          </Link>
+          <Link className={pathname === '/about' ? 'active' : ''} href="/about" onClick={() => setOpen(false)}>
+            About
+          </Link>
+          <Link className={pathname === '/contact' ? 'active' : ''} href="/contact" onClick={() => setOpen(false)}>
+            Contact
+          </Link>
+        </nav>
+        <div className="header-actions">
+          <button aria-label="Open menu" className="icon-button mobile-only" onClick={() => setOpen(!open)}>
+            {open ? <X /> : <Menu />}
+          </button>
+          <button
+            className="header-cart"
+            onClick={() => setIsBagOpen(true)}
+            aria-label={`Open shopping bag with ${totalCount} items`}
+          >
+            Bag <span>{totalCount}</span>
+          </button>
+        </div>
+      </header>
+      {open && <div className="mobile-nav-backdrop" onClick={() => setOpen(false)} aria-hidden="true" />}
+    </>
   )
 }
 
@@ -96,6 +121,7 @@ function Footer() {
         <div>
           <span className="eyebrow">Explore</span>
           <Link href="/collection">Collection</Link>
+          <Link href="/customize">Customize Studio</Link>
           <Link href="/about">About UNIFORT</Link>
           <Link href="/contact">Contact studio</Link>
         </div>
@@ -113,34 +139,6 @@ function Footer() {
   )
 }
 
-function Button({
-  children,
-  href,
-  outline = false,
-  onClick,
-  type = 'button',
-}: {
-  children: React.ReactNode
-  href?: string
-  outline?: boolean
-  onClick?: (e: React.MouseEvent<HTMLButtonElement | HTMLAnchorElement>) => void
-  type?: 'button' | 'submit' | 'reset'
-}) {
-  if (href) {
-    return (
-      <Link href={href} className={outline ? 'button outline' : 'button'} onClick={onClick}>
-        {children}
-        <ArrowUpRight data-icon="inline-end" />
-      </Link>
-    )
-  }
-  return (
-    <button type={type} className={outline ? 'button outline' : 'button'} onClick={onClick}>
-      {children}
-      <ArrowUpRight data-icon="inline-end" />
-    </button>
-  )
-}
 
 function CraftCarousel() {
   const [active, setActive] = useState(0)
@@ -233,7 +231,7 @@ function Home() {
             </p>
             <div className="reveal delay-3" style={{ display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
               <Button href="/collection">Explore the collection</Button>
-              <Button href="/about" outline>Our story</Button>
+              <Button href="/customize" outline>Customize in 3D</Button>
             </div>
           </div>
 
@@ -426,7 +424,10 @@ function Collection() {
                 {selected.price}
                 <span>Available now</span>
               </div>
-              <Button onClick={handleReserve}>Reserve this piece</Button>
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                <Button onClick={handleReserve}>Reserve this piece</Button>
+                <Button href="/customize" outline>Customize in 3D</Button>
+              </div>
             </div>
           </div>
         </div>
@@ -693,6 +694,10 @@ export default function Page() {
         {pathname === '/collection' ? (
           <Suspense fallback={<main className="page route-loading" aria-label="Loading collection" />}>
             <Collection />
+          </Suspense>
+        ) : pathname === '/customize' ? (
+          <Suspense fallback={<main className="page route-loading" aria-label="Loading studio" />}>
+            <CustomizeStudio />
           </Suspense>
         ) : pathname === '/about' ? (
           <Suspense fallback={<main className="page route-loading" aria-label="Loading about" />}>
