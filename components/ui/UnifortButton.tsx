@@ -2,30 +2,42 @@
 
 import React from 'react'
 import Link from 'next/link'
-import { ArrowUpRight } from 'lucide-react'
+import { ArrowUpRight, Loader2 } from 'lucide-react'
 
 export interface UnifortButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  children: React.ReactNode
+  children?: React.ReactNode
   href?: string
-  variant?: 'primary' | 'outline' | 'glass' | 'ghost' | 'icon' | 'custom'
+  variant?:
+    | 'primary'
+    | 'secondary'
+    | 'outline'
+    | 'ghost'
+    | 'danger'
+    | 'danger-outline'
+    | 'tab'
+    | 'glass'
+    | 'icon'
+    | 'custom'
   outline?: boolean // backwards compatibility
   size?: 'xxs' | 'xs' | 'sm' | 'md' | 'lg' | 'custom'
   thin?: boolean // sleek, thinner vertical profile
+  active?: boolean // for tab or toggle buttons
   icon?: React.ReactNode
   iconPosition?: 'start' | 'end'
   iconSize?: number | string
   showArrow?: boolean
   fullWidth?: boolean
+  loading?: boolean
   className?: string
   style?: React.CSSProperties
   ariaLabel?: string
 
-  // Advanced customization props
+  // Advanced customization overrides
   bg?: string
   textColor?: string
   borderColor?: string
   blur?: 'none' | 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | string
-  rounded?: 'none' | 'sm' | 'md' | 'lg' | 'xl' | 'full' | string
+  rounded?: 'none' | 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'full' | string
   height?: string | number
   width?: string | number
   minWidth?: string | number
@@ -41,11 +53,13 @@ export function UnifortButton({
   outline = false,
   size = 'md',
   thin = false,
+  active = false,
   icon,
-  iconPosition = 'end',
+  iconPosition = 'start',
   iconSize,
-  showArrow = true,
+  showArrow = false,
   fullWidth = false,
+  loading = false,
   className = '',
   style,
   onClick,
@@ -59,7 +73,7 @@ export function UnifortButton({
   textColor,
   borderColor,
   blur,
-  rounded = 'full',
+  rounded = 'xl',
   height,
   width,
   minWidth,
@@ -74,35 +88,44 @@ export function UnifortButton({
   // Predefined standard size classes
   const sizeClasses = {
     xxs: thin
-      ? 'text-[9.5px] h-[22px] px-2 gap-1 tracking-wide'
+      ? 'text-[10px] h-[24px] px-2 gap-1 tracking-wide'
       : 'text-[10px] h-[26px] py-1 px-2.5 gap-1 tracking-wide',
     xs: thin
-      ? 'text-[10.5px] h-[26px] px-2.5 gap-1.5'
-      : 'text-[11px] h-[30px] py-1 px-3 gap-1.5',
+      ? 'text-[11px] h-[28px] px-2.5 gap-1.5'
+      : 'text-[11px] h-[32px] py-1 px-3 gap-1.5',
     sm: thin
       ? 'text-xs h-[32px] px-3.5 gap-2'
       : 'text-xs h-[36px] py-1.5 px-4 gap-2',
     md: thin
-      ? 'text-sm h-[40px] px-5 gap-2.5'
-      : 'text-sm h-[46px] py-2.5 px-6 gap-3',
+      ? 'text-xs sm:text-sm h-[38px] px-4.5 gap-2'
+      : 'text-xs sm:text-sm h-[44px] py-2 px-5 gap-2.5',
     lg: thin
-      ? 'text-base h-[48px] px-7 gap-3'
-      : 'text-base h-[54px] py-3 px-8 gap-4',
+      ? 'text-sm sm:text-base h-[46px] px-6 gap-2.5'
+      : 'text-sm sm:text-base h-[52px] py-2.5 px-7 gap-3',
     custom: '',
   }[size]
 
-  // Predefined variant styles
+  // Predefined variant styles with guaranteed high-contrast text
   const variantClasses = {
     primary:
-      'button !bg-gradient-to-r !from-[#424a70] !to-[#2e3452] !text-white [&_*]:!text-white border border-white/25 shadow-[0_8px_22px_rgba(66,74,112,0.22),inset_0_1px_1px_rgba(255,255,255,0.35)] hover:shadow-[0_12px_28px_rgba(66,74,112,0.3)] hover:-translate-y-0.5',
+      '!bg-gradient-to-r !from-[#424a70] !to-[#2e3452] !text-white [&_*]:!text-white border border-white/20 shadow-[0_4px_16px_rgba(66,74,112,0.24)] hover:!bg-[#4f5987] hover:shadow-[0_8px_24px_rgba(66,74,112,0.32)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.985]',
+    secondary:
+      '!bg-[#edf0f8] hover:!bg-[#e2e6f4] !text-[#1c2033] [&_*]:!text-[#1c2033] border border-[rgba(66,74,112,0.2)] shadow-2xs hover:shadow-xs active:scale-[0.985]',
     outline:
-      'button outline bg-white/75 backdrop-blur-xl text-[#1e2338] border border-[rgba(66,74,112,0.22)] shadow-[0_4px_16px_rgba(66,74,112,0.05)] hover:bg-[#424a70]/10 hover:border-[#424a70] hover:text-[#424a70] hover:-translate-y-0.5',
-    glass:
-      'button outline !bg-white/15 backdrop-blur-2xl !text-white [&_*]:!text-white border border-white/40 shadow-[0_8px_32px_rgba(0,0,0,0.25),inset_0_1px_1px_rgba(255,255,255,0.45)] hover:!bg-white/30 hover:border-white/70 hover:shadow-[0_12px_36px_rgba(0,0,0,0.35),0_0_20px_rgba(255,255,255,0.3)] hover:-translate-y-0.5',
+      '!bg-white hover:!bg-[#f5f6fb] !text-[#1c2033] [&_*]:!text-[#1c2033] border border-[rgba(66,74,112,0.3)] hover:border-[#424a70] shadow-2xs hover:shadow-xs hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.985]',
     ghost:
-      'bg-transparent text-[#424a70] hover:bg-[#424a70]/10 border border-transparent',
+      '!bg-transparent hover:!bg-[#424a70]/10 !text-[#1c2033] [&_*]:!text-[#1c2033] border border-transparent active:scale-[0.985]',
+    danger:
+      '!bg-red-600 hover:!bg-red-700 !text-white [&_*]:!text-white border border-transparent shadow-xs hover:shadow-sm active:scale-[0.985]',
+    'danger-outline':
+      '!bg-white hover:!bg-red-50 !text-red-600 [&_*]:!text-red-600 border border-red-500/30 hover:border-red-500 shadow-2xs active:scale-[0.985]',
+    tab: active
+      ? '!bg-[#424a70] !text-white [&_*]:!text-white font-semibold shadow-xs border border-transparent'
+      : '!bg-white/80 hover:!bg-white !text-[#1c2033] [&_*]:!text-[#1c2033] border border-[rgba(66,74,112,0.18)] hover:border-[#424a70]/40 shadow-2xs',
+    glass:
+      '!bg-white/25 backdrop-blur-2xl !text-white [&_*]:!text-white border border-white/40 shadow-[0_8px_32px_rgba(0,0,0,0.25)] hover:!bg-white/35 active:scale-[0.985]',
     icon:
-      'bg-white/70 backdrop-blur-md text-[#2b314d] border border-[rgba(66,74,112,0.18)] hover:bg-white hover:text-[#1c2033] p-2 rounded-full shadow-2xs',
+      '!bg-white hover:!bg-[#f4f5fb] !text-[#1c2033] [&_*]:!text-[#1c2033] border border-[rgba(66,74,112,0.24)] hover:border-[#424a70] p-2 shadow-2xs hover:shadow-xs active:scale-[0.985]',
     custom: '',
   }[resolvedVariant]
 
@@ -113,8 +136,9 @@ export function UnifortButton({
     md: 'rounded-md',
     lg: 'rounded-lg',
     xl: 'rounded-xl',
+    '2xl': 'rounded-2xl',
     full: 'rounded-full',
-  }[rounded as 'full'] || (rounded ? '' : 'rounded-full')
+  }[rounded as 'xl'] || (rounded ? '' : 'rounded-xl')
 
   // Blur classes
   const blurClass = blur
@@ -146,39 +170,35 @@ export function UnifortButton({
   }
 
   // Base layout classes
-  const baseClasses = `group inline-flex items-center justify-center font-medium cursor-pointer select-none transition-all duration-300 leading-none ${
+  const baseClasses = `group inline-flex items-center justify-center font-medium cursor-pointer select-none transition-all duration-200 leading-none whitespace-nowrap shrink-0 ${
     roundedClass
   } ${blurClass} ${fullWidth ? 'w-full' : ''} ${
-    disabled ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''
+    disabled || loading ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''
   } ${sizeClasses} ${variantClasses} ${className}`.trim()
 
-  // Calculate icon size
-  const defaultArrowDim =
-    size === 'xxs'
-      ? thin
-        ? 'w-2 h-2'
-        : 'w-2.5 h-2.5'
-      : size === 'xs'
-      ? 'w-3 h-3'
-      : size === 'sm'
-      ? 'w-3.5 h-3.5'
-      : 'w-4 h-4'
-
-  const renderedIcon =
-    icon !== undefined ? (
-      icon
-    ) : showArrow && resolvedVariant !== 'icon' ? (
-      <ArrowUpRight
-        className={`${defaultArrowDim} shrink-0 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5`}
-        style={iconSize ? { width: iconSize, height: iconSize } : undefined}
-      />
-    ) : null
-
-  const content = (
+  const renderedContent = (
     <>
-      {iconPosition === 'start' && renderedIcon}
-      <span>{children}</span>
-      {iconPosition === 'end' && renderedIcon}
+      {loading ? (
+        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+      ) : (
+        icon && iconPosition === 'start' && (
+          <span className="shrink-0 flex items-center justify-center">{icon}</span>
+        )
+      )}
+
+      {children && <span className="inline-block truncate">{children}</span>}
+
+      {!loading && icon && iconPosition === 'end' && (
+        <span className="shrink-0 flex items-center justify-center">{icon}</span>
+      )}
+
+      {!loading && showArrow && (
+        <ArrowUpRight
+          className={`shrink-0 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 ${
+            size === 'xxs' || size === 'xs' ? 'w-3 h-3' : 'w-3.5 h-3.5'
+          }`}
+        />
+      )}
     </>
   )
 
@@ -188,11 +208,10 @@ export function UnifortButton({
         href={href}
         className={baseClasses}
         style={mergedStyle}
-        onClick={onClick as any}
+        aria-label={ariaLabel || title}
         title={title}
-        aria-label={ariaLabel}
       >
-        {content}
+        {renderedContent}
       </Link>
     )
   }
@@ -203,16 +222,15 @@ export function UnifortButton({
       className={baseClasses}
       style={mergedStyle}
       onClick={onClick}
-      disabled={disabled}
+      disabled={disabled || loading}
+      aria-label={ariaLabel || title}
       title={title}
-      aria-label={ariaLabel}
       {...restProps}
     >
-      {content}
+      {renderedContent}
     </button>
   )
 }
 
-// Named alias for convenience
+// Convenient alias
 export const Button = UnifortButton
-export default UnifortButton

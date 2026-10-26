@@ -73,37 +73,37 @@ export function CustomizeCatalog({
         {/* Category Pills */}
         <div className="flex gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
           {categories.map((cat) => (
-            <button
+            <UnifortButton
               key={cat}
+              variant="tab"
+              active={selectedCategory === cat}
+              size="xs"
+              rounded="full"
               onClick={() => setSelectedCategory(cat)}
-              className={`px-3.5 py-1.5 text-xs font-semibold rounded-full transition-all whitespace-nowrap ${selectedCategory === cat
-                ? 'tab-active bg-[#424a70] !text-white [&_*]:!text-white shadow-xs'
-                : 'bg-white/80 border border-[rgba(66,74,112,0.15)] text-[#687194] hover:text-[#1c2033] hover:bg-white'
-                }`}
             >
               {cat}
-            </button>
+            </UnifortButton>
           ))}
         </div>
 
         {/* Actions: Saved Designs & Sort Select */}
         <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
           {onOpenSavedDesigns && (
-            <button
+            <UnifortButton
+              variant="outline"
+              size="xs"
+              rounded="full"
+              icon={<FolderOpen className="w-3.5 h-3.5 text-[#424a70]" />}
               onClick={onOpenSavedDesigns}
-              className="group inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-medium bg-white/90 hover:bg-white text-[#1c2033] hover:text-[#424a70] border border-[rgba(66,74,112,0.2)] hover:border-[#424a70]/40 shadow-[0_4px_14px_rgba(66,74,112,0.06)] hover:shadow-[0_6px_20px_rgba(66,74,112,0.12)] transition-all duration-200 cursor-pointer"
               title="Browse your saved designs"
             >
-              <span className="w-5 h-5 rounded-full bg-[rgba(66,74,112,0.08)] group-hover:bg-[#424a70] text-[#424a70] group-hover:text-white flex items-center justify-center transition-colors">
-                <FolderOpen className="w-3 h-3" />
-              </span>
-              <span>Save</span>
+              <span>Saved Designs</span>
               {savedCount > 0 ? (
-                <span className="px-1.5 py-0.2 text-[10px] font-bold rounded-full bg-[#424a70] text-white">
+                <span className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-[#424a70] text-white">
                   {savedCount}
                 </span>
               ) : null}
-            </button>
+            </UnifortButton>
           )}
 
           <div className="flex items-center gap-2">

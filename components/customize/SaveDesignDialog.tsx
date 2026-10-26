@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Check, Save, X } from 'lucide-react'
+import { UnifortButton } from '@/components/ui/UnifortButton'
 
 interface SaveDesignDialogProps {
   isOpen: boolean
@@ -83,34 +84,22 @@ export function SaveDesignDialog({
           </div>
 
           <div className="flex items-center justify-end gap-2.5 pt-2">
-            <button
-              type="button"
+            <UnifortButton
+              variant="outline"
+              size="sm"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-semibold text-[#687194] hover:text-[#1c2033] rounded-lg transition-colors"
             >
               Cancel
-            </button>
-            <button
+            </UnifortButton>
+            <UnifortButton
               type="submit"
+              variant="primary"
+              size="sm"
               disabled={savedSuccess}
-              className={`flex items-center gap-1.5 px-5 py-2 text-xs font-semibold text-white rounded-lg transition-all ${
-                savedSuccess
-                  ? 'bg-emerald-600'
-                  : 'bg-gradient-to-r from-[#424a70] to-[#2e3452] shadow-[0_8px_20px_rgba(66,74,112,0.22)] hover:shadow-[0_12px_28px_rgba(66,74,112,0.3)] hover:-translate-y-0.5'
-              }`}
+              icon={savedSuccess ? <Check className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />}
             >
-              {savedSuccess ? (
-                <>
-                  <Check className="w-4 h-4" />
-                  Saved to Atelier
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4" />
-                  Save Design
-                </>
-              )}
-            </button>
+              {savedSuccess ? 'Saved to Atelier' : 'Save Design'}
+            </UnifortButton>
           </div>
         </form>
       </div>

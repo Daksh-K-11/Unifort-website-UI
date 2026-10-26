@@ -3,6 +3,7 @@
 import React, { useState } from 'react'
 import { CustomizableProduct, FinishType, ProductColors } from '@/lib/customize/types'
 import { Check, Sparkles } from 'lucide-react'
+import { UnifortButton } from '@/components/ui/UnifortButton'
 
 interface ColorPanelProps {
   product: CustomizableProduct
@@ -50,26 +51,28 @@ export function ColorPanel({
           <label className="text-xs font-semibold uppercase tracking-wider text-[#1c2033] block mb-2 font-serif">
             Customizable Region
           </label>
-          <div className="grid grid-cols-2 gap-1.5 p-1 bg-[rgba(66,74,112,0.06)] rounded-lg">
+          <div className="grid grid-cols-2 gap-1.5 p-1 bg-[rgba(66,74,112,0.06)] rounded-xl border border-[#424a70]/12">
             {product.supportedColorRegions.map((region) => {
               const isActive = activeRegion === region.id
               const regionColor = colors[region.id] || '#f7f6f2'
               return (
-                <button
+                <UnifortButton
                   key={region.id}
+                  variant="tab"
+                  active={isActive}
+                  size="xs"
+                  rounded="lg"
                   onClick={() => setActiveRegion(region.id)}
-                  className={`flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${
-                    isActive
-                      ? 'tab-active bg-[#424a70] !text-white [&_*]:!text-white shadow-xs'
-                      : 'text-[#687194] hover:text-[#1c2033]'
-                  }`}
+                  icon={
+                    <span
+                      className="w-3.5 h-3.5 rounded-full border border-black/15 shrink-0 shadow-2xs"
+                      style={{ backgroundColor: regionColor }}
+                    />
+                  }
+                  className="w-full justify-start text-xs font-semibold"
                 >
-                  <span
-                    className="w-3.5 h-3.5 rounded-full border border-black/15 shrink-0 shadow-2xs"
-                    style={{ backgroundColor: regionColor }}
-                  />
-                  <span className="truncate">{region.label}</span>
-                </button>
+                  {region.label}
+                </UnifortButton>
               )
             })}
           </div>
@@ -135,12 +138,14 @@ export function ColorPanel({
               onChange={(e) => setCustomHex(e.target.value)}
               className="flex-1 px-3 py-1.5 text-xs font-mono uppercase bg-white border border-[rgba(66,74,112,0.18)] rounded-md focus:outline-none focus:border-[#424a70] shadow-2xs"
             />
-            <button
+            <UnifortButton
               type="submit"
-              className="px-3.5 py-1.5 text-xs font-semibold text-white bg-gradient-to-r from-[#424a70] to-[#2e3452] rounded-md hover:shadow-xs transition-all"
+              variant="primary"
+              size="xs"
+              rounded="lg"
             >
               Apply
-            </button>
+            </UnifortButton>
           </form>
         </div>
       </div>

@@ -28,6 +28,7 @@ import { CustomizeCatalog } from './CustomizeCatalog'
 import { ProductSwitcherModal } from './ProductSwitcherModal'
 import { SavedDesignsModal } from './SavedDesignsModal'
 import { SaveDesignDialog } from './SaveDesignDialog'
+import { UnifortButton } from '@/components/ui/UnifortButton'
 
 // Left Tool Panels
 import { ColorPanel } from './toolPanels/ColorPanel'
@@ -472,37 +473,34 @@ export function CustomizeStudio() {
       />
 
       {/* Mobile Mode Tabs (Preview / Tools / Properties) */}
-      <div className="flex lg:hidden items-center justify-around bg-white/80 backdrop-blur-md border-b border-[rgba(66,74,112,0.12)] p-1.5 text-xs z-20 shrink-0">
-        <button
+      <div className="flex lg:hidden items-center justify-around bg-white/90 backdrop-blur-md border-b border-[rgba(66,74,112,0.14)] p-1.5 gap-1.5 text-xs z-20 shrink-0">
+        <UnifortButton
+          variant="tab"
+          active={mobileTab === 'preview'}
+          size="xs"
           onClick={() => setMobileTab('preview')}
-          className={`py-1.5 px-3 rounded-lg font-semibold transition-all ${
-            mobileTab === 'preview'
-              ? 'tab-active bg-[#424a70] !text-white [&_*]:!text-white shadow-xs'
-              : 'text-[#687194] hover:text-[#1c2033]'
-          }`}
+          className="flex-1 font-semibold"
         >
           Studio View
-        </button>
-        <button
+        </UnifortButton>
+        <UnifortButton
+          variant="tab"
+          active={mobileTab === 'tools'}
+          size="xs"
           onClick={() => setMobileTab('tools')}
-          className={`py-1.5 px-3 rounded-lg font-semibold transition-all ${
-            mobileTab === 'tools'
-              ? 'tab-active bg-[#424a70] !text-white [&_*]:!text-white shadow-xs'
-              : 'text-[#687194] hover:text-[#1c2033]'
-          }`}
+          className="flex-1 font-semibold"
         >
           Design Tools
-        </button>
-        <button
+        </UnifortButton>
+        <UnifortButton
+          variant="tab"
+          active={mobileTab === 'properties'}
+          size="xs"
           onClick={() => setMobileTab('properties')}
-          className={`py-1.5 px-3 rounded-lg font-semibold transition-all ${
-            mobileTab === 'properties'
-              ? 'tab-active bg-[#424a70] !text-white [&_*]:!text-white shadow-xs'
-              : 'text-[#687194] hover:text-[#1c2033]'
-          }`}
+          className="flex-1 font-semibold"
         >
           Properties & Price
-        </button>
+        </UnifortButton>
       </div>
 
       {/* Main Studio 3-Column Workspace */}
@@ -514,13 +512,13 @@ export function CustomizeStudio() {
           }`}
         >
           {/* Tool Category Tabs */}
-          <div className="flex items-center overflow-x-auto no-scrollbar sm:grid sm:grid-cols-7 border-b border-[rgba(66,74,112,0.12)] bg-[rgba(66,74,112,0.03)] p-1 gap-1">
+          <div className="flex items-center overflow-x-auto no-scrollbar sm:grid sm:grid-cols-7 border-b border-[rgba(66,74,112,0.14)] bg-[rgba(66,74,112,0.04)] p-1 gap-1">
             <button
               onClick={() => setActiveToolTab('colors')}
-              className={`flex flex-col items-center justify-center py-2 px-1.5 sm:px-1 rounded-xl transition-all shrink-0 min-w-[50px] sm:min-w-0 ${
+              className={`flex flex-col items-center justify-center py-2 px-1.5 sm:px-1 rounded-xl transition-all shrink-0 min-w-[50px] sm:min-w-0 cursor-pointer ${
                 activeToolTab === 'colors'
                   ? 'tab-active bg-[#424a70] !text-white [&_*]:!text-white font-semibold shadow-xs'
-                  : 'text-[#687194] hover:text-[#1c2033] hover:bg-white/60'
+                  : 'text-[#1c2033] font-medium hover:text-[#424a70] hover:bg-white/80'
               }`}
               title="Glaze & Finish"
             >
@@ -529,10 +527,10 @@ export function CustomizeStudio() {
             </button>
             <button
               onClick={() => setActiveToolTab('text')}
-              className={`flex flex-col items-center justify-center py-2 px-1.5 sm:px-1 rounded-xl transition-all shrink-0 min-w-[50px] sm:min-w-0 ${
+              className={`flex flex-col items-center justify-center py-2 px-1.5 sm:px-1 rounded-xl transition-all shrink-0 min-w-[50px] sm:min-w-0 cursor-pointer ${
                 activeToolTab === 'text'
                   ? 'tab-active bg-[#424a70] !text-white [&_*]:!text-white font-semibold shadow-xs'
-                  : 'text-[#687194] hover:text-[#1c2033] hover:bg-white/60'
+                  : 'text-[#1c2033] font-medium hover:text-[#424a70] hover:bg-white/80'
               }`}
               title="Typography"
             >
@@ -541,10 +539,10 @@ export function CustomizeStudio() {
             </button>
             <button
               onClick={() => setActiveToolTab('image')}
-              className={`flex flex-col items-center justify-center py-2 px-1.5 sm:px-1 rounded-xl transition-all shrink-0 min-w-[50px] sm:min-w-0 ${
+              className={`flex flex-col items-center justify-center py-2 px-1.5 sm:px-1 rounded-xl transition-all shrink-0 min-w-[50px] sm:min-w-0 cursor-pointer ${
                 activeToolTab === 'image'
                   ? 'tab-active bg-[#424a70] !text-white [&_*]:!text-white font-semibold shadow-xs'
-                  : 'text-[#687194] hover:text-[#1c2033] hover:bg-white/60'
+                  : 'text-[#1c2033] font-medium hover:text-[#424a70] hover:bg-white/80'
               }`}
               title="Upload Artwork"
             >
@@ -553,10 +551,10 @@ export function CustomizeStudio() {
             </button>
             <button
               onClick={() => setActiveToolTab('graphic')}
-              className={`flex flex-col items-center justify-center py-2 px-1.5 sm:px-1 rounded-xl transition-all shrink-0 min-w-[50px] sm:min-w-0 ${
+              className={`flex flex-col items-center justify-center py-2 px-1.5 sm:px-1 rounded-xl transition-all shrink-0 min-w-[50px] sm:min-w-0 cursor-pointer ${
                 activeToolTab === 'graphic'
                   ? 'tab-active bg-[#424a70] !text-white [&_*]:!text-white font-semibold shadow-xs'
-                  : 'text-[#687194] hover:text-[#1c2033] hover:bg-white/60'
+                  : 'text-[#1c2033] font-medium hover:text-[#424a70] hover:bg-white/80'
               }`}
               title="Atelier Graphics"
             >
@@ -565,10 +563,10 @@ export function CustomizeStudio() {
             </button>
             <button
               onClick={() => setActiveToolTab('pattern')}
-              className={`flex flex-col items-center justify-center py-2 px-1.5 sm:px-1 rounded-xl transition-all shrink-0 min-w-[50px] sm:min-w-0 ${
+              className={`flex flex-col items-center justify-center py-2 px-1.5 sm:px-1 rounded-xl transition-all shrink-0 min-w-[50px] sm:min-w-0 cursor-pointer ${
                 activeToolTab === 'pattern'
                   ? 'tab-active bg-[#424a70] !text-white [&_*]:!text-white font-semibold shadow-xs'
-                  : 'text-[#687194] hover:text-[#1c2033] hover:bg-white/60'
+                  : 'text-[#1c2033] font-medium hover:text-[#424a70] hover:bg-white/80'
               }`}
               title="Patterns & Textures"
             >
@@ -577,10 +575,10 @@ export function CustomizeStudio() {
             </button>
             <button
               onClick={() => setActiveToolTab('templates')}
-              className={`flex flex-col items-center justify-center py-2 px-1.5 sm:px-1 rounded-xl transition-all shrink-0 min-w-[50px] sm:min-w-0 ${
+              className={`flex flex-col items-center justify-center py-2 px-1.5 sm:px-1 rounded-xl transition-all shrink-0 min-w-[50px] sm:min-w-0 cursor-pointer ${
                 activeToolTab === 'templates'
                   ? 'tab-active bg-[#424a70] !text-white [&_*]:!text-white font-semibold shadow-xs'
-                  : 'text-[#687194] hover:text-[#1c2033] hover:bg-white/60'
+                  : 'text-[#1c2033] font-medium hover:text-[#424a70] hover:bg-white/80'
               }`}
               title="Designer Compositions"
             >
@@ -589,10 +587,10 @@ export function CustomizeStudio() {
             </button>
             <button
               onClick={() => setActiveToolTab('layers')}
-              className={`flex flex-col items-center justify-center py-2 px-1.5 sm:px-1 rounded-xl transition-all shrink-0 min-w-[50px] sm:min-w-0 relative ${
+              className={`flex flex-col items-center justify-center py-2 px-1.5 sm:px-1 rounded-xl transition-all shrink-0 min-w-[50px] sm:min-w-0 relative cursor-pointer ${
                 activeToolTab === 'layers'
                   ? 'tab-active bg-[#424a70] !text-white [&_*]:!text-white font-semibold shadow-xs'
-                  : 'text-[#687194] hover:text-[#1c2033] hover:bg-white/60'
+                  : 'text-[#1c2033] font-medium hover:text-[#424a70] hover:bg-white/80'
               }`}
               title="Layers"
             >

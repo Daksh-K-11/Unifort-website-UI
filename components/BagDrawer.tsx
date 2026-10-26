@@ -35,26 +35,13 @@ export function BagDrawer() {
 
   const handleOrder = () => {
     if (items.length === 0) return
-
-    const itemLines = items.map(
-      (item) =>
-        `• ${item.quantity} × ${item.product.name} (${item.product.price} each) — ₹${(
-          parsePrice(item.product.price) * item.quantity
-        ).toLocaleString()}`
-    )
-
-    const message = `Hello UNIFORT Studio,
-
-I would like to inquire about ordering the following pieces:
-
-${itemLines.join('\n')}
-
-Estimated Total: ₹${totalPrice.toLocaleString()}
-
-Please confirm availability, lead time, and shipping details.`
-
     setIsBagOpen(false)
-    router.push(`/contact?order=${encodeURIComponent(message)}`)
+    router.push('/checkout')
+  }
+
+  const handleHospitalityInquiry = () => {
+    setIsBagOpen(false)
+    router.push('/contact?type=HOSPITALITY_COMMISSION')
   }
 
   const handleExplore = () => {
@@ -155,20 +142,54 @@ Please confirm availability, lead time, and shipping details.`
 
             <div className="bag-drawer-footer">
               <div className="summary-row">
-                <span>Subtotal</span>
-                <strong>₹{totalPrice.toLocaleString()}</strong>
+                <span className="text-xs text-[#687194]">Subtotal</span>
+                <strong className="text-sm font-semibold text-[#1c2033]">₹{totalPrice.toLocaleString()}</strong>
               </div>
-              <p className="shipping-note muted">
-                Taxes, availability & bespoke shipping calculated upon studio inquiry.
+              <div className="summary-row">
+                <span className="text-xs text-[#687194]">Archival Insured Shipping</span>
+                <span className="text-xs font-medium text-emerald-600">
+                  {totalPrice >= 500 ? 'Complimentary' : '₹40'}
+                </span>
+              </div>
+              <div className="summary-row border-t border-[rgba(66,74,112,0.12)] pt-2 mt-1">
+                <span className="text-xs font-semibold text-[#1c2033]">Estimated Total</span>
+                <strong className="text-base font-serif font-bold text-[#424a70]">
+                  ₹{(totalPrice + (totalPrice >= 500 ? 0 : 40)).toLocaleString()}
+                </strong>
+              </div>
+              <p className="shipping-note text-[11px] text-[#687194] leading-relaxed mt-1">
+                All taxes & archival mineral packaging included. Ships direct from our Chennai atelier.
               </p>
 
-              <button className="button bag-order-btn" onClick={handleOrder}>
-                Order pieces <ArrowUpRight />
-              </button>
+              <div className="flex flex-col gap-2 mt-4">
+                <button
+                  className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-[#424a70] to-[#2e3452] !text-white font-medium text-xs flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all"
+                  onClick={handleOrder}
+                >
+                  <span>Proceed to Checkout</span>
+                  <ArrowUpRight className="w-4 h-4" />
+                </button>
 
-              <button className="clear-bag-link" onClick={clearBag}>
-                Clear bag
-              </button>
+                <div className="flex items-center justify-between text-xs pt-1 px-1">
+                  <button
+                    type="button"
+                    className="text-[#687194] hover:text-[#1c2033] transition-colors"
+                    onClick={() => {
+                      setIsBagOpen(false)
+                      router.push('/cart')
+                    }}
+                  >
+                    View Full Cart
+                  </button>
+                  <button
+                    type="button"
+                    className="text-red-500/80 hover:text-red-600 transition-colors"
+                    onClick={clearBag}
+                  >
+                    Clear Bag
+                  </button>
+                </div>
+              </div>
             </div>
           </>
         )}

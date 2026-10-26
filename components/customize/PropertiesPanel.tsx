@@ -12,6 +12,7 @@ import {
   Trash2,
   Unlock,
 } from 'lucide-react'
+import { UnifortButton } from '@/components/ui/UnifortButton'
 
 interface PropertiesPanelProps {
   product: CustomizableProduct
@@ -88,12 +89,13 @@ export function PropertiesPanel({
                     : selectedElement.name || 'Object'}
                 </h3>
               </div>
-              <button
+              <UnifortButton
+                variant="ghost"
+                size="xxs"
                 onClick={() => onSelectElement(null)}
-                className="text-[11px] font-semibold text-[#424a70] hover:underline"
               >
                 Deselect
-              </button>
+              </UnifortButton>
             </div>
 
             {/* Position X and Y */}
@@ -206,75 +208,76 @@ export function PropertiesPanel({
               <label className="text-[11px] font-semibold text-[#1c2033] block mb-1.5">
                 Alignment Shortcuts
               </label>
-              <div className="grid grid-cols-3 gap-1 bg-[rgba(66,74,112,0.06)] p-1 rounded-xl">
-                <button
+              <div className="grid grid-cols-3 gap-1.5 bg-[rgba(66,74,112,0.06)] p-1.5 rounded-xl border border-[#424a70]/10">
+                <UnifortButton
+                  variant="outline"
+                  size="xxs"
                   onClick={() => alignElement('left')}
-                  className="p-1.5 text-center text-[10px] font-semibold text-[#687194] hover:text-[#1c2033] hover:bg-white rounded-lg transition-colors shadow-2xs"
                 >
                   Left
-                </button>
-                <button
+                </UnifortButton>
+                <UnifortButton
+                  variant="outline"
+                  size="xxs"
                   onClick={() => alignElement('centerX')}
-                  className="p-1.5 text-center text-[10px] font-semibold text-[#687194] hover:text-[#1c2033] hover:bg-white rounded-lg transition-colors shadow-2xs"
                 >
                   Center X
-                </button>
-                <button
+                </UnifortButton>
+                <UnifortButton
+                  variant="outline"
+                  size="xxs"
                   onClick={() => alignElement('right')}
-                  className="p-1.5 text-center text-[10px] font-semibold text-[#687194] hover:text-[#1c2033] hover:bg-white rounded-lg transition-colors shadow-2xs"
                 >
                   Right
-                </button>
-                <button
+                </UnifortButton>
+                <UnifortButton
+                  variant="outline"
+                  size="xxs"
                   onClick={() => alignElement('top')}
-                  className="p-1.5 text-center text-[10px] font-semibold text-[#687194] hover:text-[#1c2033] hover:bg-white rounded-lg transition-colors shadow-2xs"
                 >
                   Top
-                </button>
-                <button
+                </UnifortButton>
+                <UnifortButton
+                  variant="outline"
+                  size="xxs"
                   onClick={() => alignElement('centerY')}
-                  className="p-1.5 text-center text-[10px] font-semibold text-[#687194] hover:text-[#1c2033] hover:bg-white rounded-lg transition-colors shadow-2xs"
                 >
                   Center Y
-                </button>
-                <button
+                </UnifortButton>
+                <UnifortButton
+                  variant="outline"
+                  size="xxs"
                   onClick={() => alignElement('bottom')}
-                  className="p-1.5 text-center text-[10px] font-semibold text-[#687194] hover:text-[#1c2033] hover:bg-white rounded-lg transition-colors shadow-2xs"
                 >
                   Bottom
-                </button>
+                </UnifortButton>
               </div>
             </div>
 
-            {/* Actions: Duplicate, Lock, Delete */}
-            <div className="flex items-center gap-2 pt-2 border-t border-[rgba(66,74,112,0.1)]">
-              <button
+            <div className="flex items-center gap-2 pt-2 border-t border-[rgba(66,74,112,0.12)]">
+              <UnifortButton
+                variant="outline"
+                size="xs"
+                icon={<Copy className="w-3.5 h-3.5" />}
                 onClick={() => onDuplicateElement(selectedElement.id)}
-                className="flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-semibold text-[#424a70] bg-white border border-[rgba(66,74,112,0.2)] rounded-full hover:bg-slate-50 transition-colors shadow-2xs"
+                className="flex-1"
               >
-                <Copy className="w-3.5 h-3.5" />
                 Duplicate
-              </button>
-              <button
-                onClick={() =>
-                  onUpdateElement(selectedElement.id, { locked: !selectedElement.locked })
-                }
-                className="p-2 text-[#424a70] bg-white border border-[rgba(66,74,112,0.2)] rounded-full hover:bg-slate-50 transition-colors shadow-2xs"
-                title={selectedElement.locked ? 'Unlock' : 'Lock'}
-              >
-                {selectedElement.locked ? (
-                  <Lock className="w-3.5 h-3.5 text-amber-500" />
-                ) : (
-                  <Unlock className="w-3.5 h-3.5" />
-                )}
-              </button>
-              <button
+              </UnifortButton>
+              <UnifortButton
+                variant="outline"
+                size="xs"
+                icon={selectedElement.locked ? <Lock className="w-3.5 h-3.5 text-amber-600" /> : <Unlock className="w-3.5 h-3.5" />}
+                onClick={() => onUpdateElement(selectedElement.id, { locked: !selectedElement.locked })}
+                title={selectedElement.locked ? 'Unlock Layer' : 'Lock Layer'}
+              />
+              <UnifortButton
+                variant="danger-outline"
+                size="xs"
+                icon={<Trash2 className="w-3.5 h-3.5" />}
                 onClick={() => onDeleteElement(selectedElement.id)}
-                className="p-2 text-red-500 bg-red-50 border border-red-200 rounded-full hover:bg-red-100 transition-colors shadow-2xs"
                 title="Delete Layer"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
+              />
             </div>
           </div>
         ) : (
@@ -348,13 +351,15 @@ export function PropertiesPanel({
         </div>
 
         {/* Primary Action Button */}
-        <button
+        <UnifortButton
+          variant="primary"
+          size="md"
+          fullWidth
+          icon={<ShoppingBag className="w-4 h-4" />}
           onClick={onAddToBag}
-          className="button w-full justify-center !py-3 !text-xs !shadow-[0_10px_28px_rgba(66,74,112,0.22)]"
         >
-          <ShoppingBag className="w-4 h-4" />
-          <span>Add Customized Piece to Bag</span>
-        </button>
+          Add Customized Piece to Bag
+        </UnifortButton>
       </div>
     </div>
   )

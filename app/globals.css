@@ -66,18 +66,38 @@ button {
   cursor: pointer;
 }
 
-/* Active blue tab / pill / button text contrast guarantee */
+/* Active / Selected tab & button high contrast guarantee (light & dark mode) */
 .tab-active,
 button.tab-active,
-[data-active="true"],
-button.button:not(.outline) {
+[data-active="true"] {
+  background-color: #424a70 !important;
   color: #ffffff !important;
 }
 
 .tab-active *,
 button.tab-active *,
-[data-active="true"] *,
+[data-active="true"] * {
+  color: #ffffff !important;
+}
+
+/* Primary buttons with .button class ensure background and text match */
+button.button:not(.outline) {
+  background-color: #424a70;
+  color: #ffffff !important;
+}
+
 button.button:not(.outline) * {
+  color: #ffffff !important;
+}
+
+/* Global text selection (highlighting) high contrast guarantee */
+::selection {
+  background-color: #424a70 !important;
+  color: #ffffff !important;
+}
+
+::-moz-selection {
+  background-color: #424a70 !important;
   color: #ffffff !important;
 }
 
@@ -224,6 +244,41 @@ img {
   font-size: 11px;
   font-weight: 600;
   margin-left: 8px;
+}
+
+.header-profile-btn {
+  border: 1px solid rgba(66, 74, 112, 0.22);
+  border-radius: 999px;
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  color: #1c2033 !important;
+  font-weight: 600;
+  font-size: 13px;
+  transition: all 0.25s ease-in-out;
+  box-shadow: 0 2px 8px rgba(66, 74, 112, 0.05);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.header-profile-btn:hover {
+  background: #ffffff;
+  border-color: #424a70;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(66, 74, 112, 0.12);
+}
+
+.header-profile-btn.active {
+  background: #424a70;
+  border-color: #424a70;
+  color: #ffffff !important;
+}
+
+.header-profile-btn.active * {
+  color: #ffffff !important;
 }
 
 .icon-button {
@@ -802,8 +857,9 @@ img {
 }
 
 .filter-buttons button.selected {
-  color: #1c2033;
-  border-color: var(--primary);
+  color: #1c2033 !important;
+  border-color: var(--primary) !important;
+  font-weight: 600 !important;
 }
 
 .filter-bar .muted {
@@ -2440,4 +2496,135 @@ img {
   background-image: radial-gradient(rgba(66, 74, 112, 0.08) 1px, transparent 1px);
   background-size: 16px 16px;
 }
+
+/* UNIFORT Atelier Admin Dashboard Unified Theme Tokens */
+.admin-dashboard-root {
+  color-scheme: light;
+  --adm-bg: #f8f7fa;
+  --adm-bg-subtle: #f0eff5;
+  --adm-sidebar: #ffffff;
+  --adm-sidebar-border: rgba(28, 32, 51, 0.08);
+  --adm-header: rgba(255, 255, 255, 0.94);
+  --adm-card: #ffffff;
+  --adm-card-subtle: #f8f7fc;
+  --adm-card-border: rgba(28, 32, 51, 0.09);
+  --adm-card-border-subtle: rgba(28, 32, 51, 0.05);
+  --adm-text-primary: #1c2033;
+  --adm-text-secondary: #4b5268;
+  --adm-text-muted: #747c94;
+  --adm-input-bg: #ffffff;
+  --adm-input-border: rgba(28, 32, 51, 0.16);
+  --adm-input-text: #1c2033;
+  --adm-modal-overlay: rgba(14, 17, 26, 0.55);
+  --adm-modal-bg: #ffffff;
+  --adm-table-head: #f5f4f8;
+  --adm-table-hover: rgba(66, 74, 112, 0.035);
+  --adm-tag-bg: rgba(66, 74, 112, 0.08);
+  --adm-tag-text: #424a70;
+  --adm-hover-bg: rgba(66, 74, 112, 0.06);
+  --adm-shadow: 0 4px 20px -2px rgba(28, 32, 51, 0.06);
+}
+
+.admin-dashboard-root.dark {
+  color-scheme: dark;
+  --adm-bg: #0e111a;
+  --adm-bg-subtle: #121624;
+  --adm-sidebar: #121624;
+  --adm-sidebar-border: rgba(255, 255, 255, 0.1);
+  --adm-header: rgba(15, 18, 29, 0.92);
+  --adm-card: #141827;
+  --adm-card-subtle: #0f121d;
+  --adm-card-border: rgba(255, 255, 255, 0.1);
+  --adm-card-border-subtle: rgba(255, 255, 255, 0.05);
+  --adm-text-primary: #f4f4f7;
+  --adm-text-secondary: rgba(255, 255, 255, 0.72);
+  --adm-text-muted: rgba(255, 255, 255, 0.45);
+  --adm-input-bg: #0e111a;
+  --adm-input-border: rgba(255, 255, 255, 0.12);
+  --adm-input-text: #ffffff;
+  --adm-modal-overlay: rgba(0, 0, 0, 0.75);
+  --adm-modal-bg: #141827;
+  --adm-table-head: rgba(16, 19, 30, 0.6);
+  --adm-table-hover: rgba(255, 255, 255, 0.02);
+  --adm-tag-bg: rgba(255, 255, 255, 0.05);
+  --adm-tag-text: rgba(255, 255, 255, 0.8);
+  --adm-hover-bg: rgba(255, 255, 255, 0.04);
+  --adm-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+}
+
+.adm-bg { background-color: var(--adm-bg); }
+.adm-bg-subtle { background-color: var(--adm-bg-subtle); }
+.adm-sidebar { background-color: var(--adm-sidebar); border-color: var(--adm-sidebar-border); }
+.adm-header { background-color: var(--adm-header); }
+.adm-card { background-color: var(--adm-card); border-color: var(--adm-card-border); box-shadow: var(--adm-shadow); }
+.adm-card-subtle { background-color: var(--adm-card-subtle); border-color: var(--adm-card-border-subtle); }
+.adm-text-primary { color: var(--adm-text-primary); }
+.adm-text-secondary { color: var(--adm-text-secondary); }
+.adm-text-muted { color: var(--adm-text-muted); }
+.adm-input { background-color: var(--adm-input-bg); border-color: var(--adm-input-border); color: var(--adm-input-text); }
+.adm-border { border-color: var(--adm-card-border); }
+.adm-border-subtle { border-color: var(--adm-card-border-subtle); }
+.adm-table-head { background-color: var(--adm-table-head); }
+.adm-table-hover:hover { background-color: var(--adm-table-hover); }
+.adm-hover:hover { background-color: var(--adm-hover-bg); }
+.adm-modal-bg { background-color: var(--adm-modal-bg); border-color: var(--adm-card-border); }
+.adm-modal-overlay { background-color: var(--adm-modal-overlay); }
+
+/* Guarantee that any element or button with .tab-active inside the admin dashboard has high contrast */
+.admin-dashboard-root .tab-active,
+.admin-dashboard-root button.tab-active {
+  background-color: #424a70 !important;
+  color: #ffffff !important;
+}
+
+.admin-dashboard-root .tab-active *,
+.admin-dashboard-root button.tab-active * {
+  color: #ffffff !important;
+}
+
+.admin-dashboard-root ::selection {
+  background-color: #424a70 !important;
+  color: #ffffff !important;
+}
+
+.admin-dashboard-root.dark ::selection {
+  background-color: #6366f1 !important;
+  color: #ffffff !important;
+}
+
+/* Ensure select option dropdown elements have crisp visibility */
+.admin-dashboard-root select option {
+  background-color: var(--adm-card);
+  color: var(--adm-text-primary);
+}
+
+.admin-dashboard-root select option:checked {
+  background-color: #424a70;
+  color: #ffffff;
+}
+
+/* UNIFORT Admin Action Button Utilities */
+.adm-btn-primary {
+  background-color: #424a70 !important;
+  color: #ffffff !important;
+  font-weight: 500 !important;
+  transition: all 0.18s ease-in-out !important;
+  box-shadow: 0 4px 14px -2px rgba(66, 74, 112, 0.28) !important;
+}
+
+.adm-btn-primary:hover {
+  background-color: #4f5987 !important;
+  color: #ffffff !important;
+  box-shadow: 0 6px 18px -2px rgba(66, 74, 112, 0.38) !important;
+}
+
+.adm-btn-primary:active {
+  transform: scale(0.985);
+}
+
+.adm-btn-primary * {
+  color: #ffffff !important;
+}
+
+
 

@@ -3,10 +3,14 @@
 import dynamic from 'next/dynamic'
 import Image from 'next/image'
 import Link from 'next/link'
-import { usePathname, useSearchParams } from 'next/navigation'
+import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import { Suspense, useEffect, useState } from 'react'
-import { ArrowUpRight, ChevronDown, ChevronLeft, ChevronRight, Menu, Minus, Plus, Sparkles, X } from 'lucide-react'
+import { ArrowUpRight, ChevronDown, ChevronLeft, ChevronRight, Menu, Minus, Plus, Sparkles, User, CheckCircle2, X } from 'lucide-react'
 import { BagProvider, useBag } from '@/lib/bag-context'
+import { CustomerProvider, useCustomer } from '@/lib/customer-context'
+import { CustomerAuthModal } from '@/components/customer/CustomerAuthModal'
+import { ProductReviewsSection } from '@/components/reviews/ProductReviewsSection'
+import { InquiryType } from '@/lib/customer-types'
 import { BagDrawer } from '@/components/BagDrawer'
 import { BagToast } from '@/components/BagToast'
 import { UnifortButton, Button } from '@/components/ui/UnifortButton'
@@ -21,6 +25,74 @@ const CustomizeStudio = dynamic(
           <div className="w-8 h-8 rounded-full border-2 border-[#424a70] border-t-transparent animate-spin" />
           <span className="text-xs uppercase tracking-wider text-[#424a70] font-medium">
             Loading Atelier 3D Studio...
+          </span>
+        </div>
+      </main>
+    ),
+  }
+)
+
+const AccountPortal = dynamic(
+  () => import('@/components/customer/AccountPortal').then((mod) => mod.AccountPortal),
+  {
+    ssr: false,
+    loading: () => (
+      <main className="page route-loading flex items-center justify-center min-h-[60vh]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 rounded-full border-2 border-[#424a70] border-t-transparent animate-spin" />
+          <span className="text-xs uppercase tracking-wider text-[#424a70] font-medium">
+            Loading Patron Portal...
+          </span>
+        </div>
+      </main>
+    ),
+  }
+)
+
+const CheckoutPage = dynamic(
+  () => import('@/components/checkout/CheckoutPage').then((mod) => mod.CheckoutPage),
+  {
+    ssr: false,
+    loading: () => (
+      <main className="page route-loading flex items-center justify-center min-h-[60vh]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 rounded-full border-2 border-[#424a70] border-t-transparent animate-spin" />
+          <span className="text-xs uppercase tracking-wider text-[#424a70] font-medium">
+            Loading Atelier Checkout...
+          </span>
+        </div>
+      </main>
+    ),
+  }
+)
+
+const CartPage = dynamic(
+  () => import('@/components/cart/CartPage').then((mod) => mod.CartPage),
+  {
+    ssr: false,
+    loading: () => (
+      <main className="page route-loading flex items-center justify-center min-h-[60vh]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 rounded-full border-2 border-[#424a70] border-t-transparent animate-spin" />
+          <span className="text-xs uppercase tracking-wider text-[#424a70] font-medium">
+            Loading Shopping Bag...
+          </span>
+        </div>
+      </main>
+    ),
+  }
+)
+
+const TrackPage = dynamic(
+  () => import('@/components/track/TrackPage').then((mod) => mod.TrackPage),
+  {
+    ssr: false,
+    loading: () => (
+      <main className="page route-loading flex items-center justify-center min-h-[60vh]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 rounded-full border-2 border-[#424a70] border-t-transparent animate-spin" />
+          <span className="text-xs uppercase tracking-wider text-[#424a70] font-medium">
+            Loading Consignment Tracking...
           </span>
         </div>
       </main>
@@ -66,6 +138,7 @@ function Header() {
   const [open, setOpen] = useState(false)
   const pathname = usePathname()
   const { totalCount, setIsBagOpen } = useBag()
+  const { customer, isLoggedIn, setAuthModalOpen } = useCustomer()
 
   return (
     <>
@@ -89,11 +162,26 @@ function Header() {
           <Link className={pathname === '/contact' ? 'active' : ''} href="/contact" onClick={() => setOpen(false)}>
             Contact
           </Link>
+          <Link className={pathname === '/track' ? 'active' : ''} href="/track" onClick={() => setOpen(false)}>
+            Track Order
+          </Link>
+          <Link className={pathname === '/account' ? 'active' : ''} href="/account" onClick={() => setOpen(false)}>
+            Profile
+          </Link>
         </nav>
         <div className="header-actions">
           <button aria-label="Open menu" className="icon-button mobile-only" onClick={() => setOpen(!open)}>
             {open ? <X /> : <Menu />}
           </button>
+          <Link
+            href="/account"
+            className={`header-profile-btn ${pathname === '/account' ? 'active' : ''}`}
+            aria-label="Patron Profile"
+            title="Patron Profile"
+          >
+            <User className="w-3.5 h-3.5 shrink-0" />
+            <span className="hidden sm:inline">Profile</span>
+          </Link>
           <button
             className="header-cart"
             onClick={() => setIsBagOpen(true)}
@@ -121,9 +209,11 @@ function Footer() {
         <div>
           <span className="eyebrow">Explore</span>
           <Link href="/collection">Collection</Link>
+          <Link href="/cart">Shopping Bag</Link>
           <Link href="/customize">Customize Studio</Link>
-          <Link href="/about">About UNIFORT</Link>
-          <Link href="/contact">Contact studio</Link>
+          <Link href="/track">Track Consignment</Link>
+          <Link href="/account">Patron Portal</Link>
+          <Link href="/admin">Atelier Admin</Link>
         </div>
         <div>
           <span className="eyebrow">Contact</span>
@@ -330,8 +420,10 @@ function ProductCard({ product, index }: { product: typeof products[number]; ind
 }
 
 function Collection() {
+  const router = useRouter()
   const [filter, setFilter] = useState('All pieces')
   const [selected, setSelected] = useState<typeof products[number] | null>(null)
+  const [modalQuantity, setModalQuantity] = useState(1)
   const searchParams = useSearchParams()
   const { addToBag, setIsBagOpen } = useBag()
 
@@ -340,15 +432,24 @@ function Collection() {
   useEffect(() => {
     const piece = searchParams.get('piece')
     setSelected(piece ? products.find((product) => product.name === piece) ?? null : null)
+    setModalQuantity(1)
   }, [searchParams])
 
   const shown = filter === 'All pieces' ? products : products.filter((p) => p.category === filter)
 
-  const handleReserve = () => {
+  const handleAddToCart = () => {
     if (selected) {
-      addToBag(selected)
+      addToBag(selected, modalQuantity)
       setSelected(null)
       setIsBagOpen(true)
+    }
+  }
+
+  const handleBuyNow = () => {
+    if (selected) {
+      addToBag(selected, modalQuantity)
+      setSelected(null)
+      router.push('/checkout')
     }
   }
 
@@ -422,12 +523,40 @@ function Collection() {
               </p>
               <div className="modal-price">
                 {selected.price}
-                <span>Available now</span>
+                <span className="text-emerald-700 font-medium">In Stock · Dispatched in 24h</span>
+              </div>
+              <div className="flex items-center gap-3 my-3">
+                <span className="text-xs text-[#687194]">Quantity:</span>
+                <div className="flex items-center border border-[rgba(66,74,112,0.2)] rounded-lg bg-[#faf9fc]">
+                  <button
+                    onClick={() => setModalQuantity((q) => Math.max(1, q - 1))}
+                    className="p-1.5 text-[#424a70] hover:text-[#1c2033]"
+                    aria-label="Decrease quantity"
+                  >
+                    <Minus className="w-3.5 h-3.5" />
+                  </button>
+                  <span className="px-3 text-xs font-mono font-semibold text-[#1c2033]">{modalQuantity}</span>
+                  <button
+                    onClick={() => setModalQuantity((q) => q + 1)}
+                    className="p-1.5 text-[#424a70] hover:text-[#1c2033]"
+                    aria-label="Increase quantity"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
               <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                <Button onClick={handleReserve}>Reserve this piece</Button>
-                <Button href="/customize" outline>Customize in 3D</Button>
+                <UnifortButton variant="primary" onClick={handleAddToCart}>
+                  Add to Bag
+                </UnifortButton>
+                <UnifortButton variant="outline" onClick={handleBuyNow}>
+                  Buy Now
+                </UnifortButton>
+                <UnifortButton href="/customize" variant="ghost">
+                  Customize in 3D
+                </UnifortButton>
               </div>
+              <ProductReviewsSection productId={selected.name} productName={selected.name} />
             </div>
           </div>
         </div>
@@ -439,15 +568,51 @@ function Collection() {
 
 function Contact() {
   const [sent, setSent] = useState(false)
+  const [inquiryType, setInquiryType] = useState<InquiryType>('HOSPITALITY_COMMISSION')
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
+  const [subject, setSubject] = useState('')
   const [message, setMessage] = useState('')
+  const [submitting, setSubmitting] = useState(false)
   const searchParams = useSearchParams()
+  const { customer, submitInquiry } = useCustomer()
+
+  useEffect(() => {
+    if (customer) {
+      if (!name) setName(customer.name)
+      if (!email) setEmail(customer.email)
+      if (!phone && customer.phone) setPhone(customer.phone)
+    }
+  }, [customer])
 
   useEffect(() => {
     const orderParam = searchParams.get('order')
     if (orderParam) {
       setMessage(orderParam)
+      setInquiryType('HOSPITALITY_COMMISSION')
+      setSubject('Hospitality Commission & Tableware Acquisition')
+    }
+    const typeParam = searchParams.get('type') as InquiryType
+    if (typeParam) {
+      setInquiryType(typeParam)
     }
   }, [searchParams])
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSubmitting(true)
+    await submitInquiry({
+      name,
+      email,
+      phone,
+      type: inquiryType,
+      subject: subject || `${inquiryType.replace(/_/g, ' ')} Inquiry`,
+      message,
+    })
+    setSubmitting(false)
+    setSent(true)
+  }
 
   return (
     <>
@@ -496,39 +661,107 @@ function Contact() {
               </p>
             </div>
           </div>
-          <form
-            className="contact-form glass-panel"
-            onSubmit={(e) => {
-              e.preventDefault()
-              setSent(true)
-            }}
-          >
+          <form className="contact-form glass-panel" onSubmit={handleSubmit}>
             <span className="eyebrow">Send a message</span>
+
+            {/* Commission Type Pills */}
+            <div style={{ marginBottom: '14px' }}>
+              <label style={{ display: 'block', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px', color: 'var(--muted)' }}>
+                Inquiry Category
+              </label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                {[
+                  { id: 'HOSPITALITY_COMMISSION', label: 'Hospitality / Restaurant' },
+                  { id: 'BESPOKE_ORDER', label: 'Bespoke Order' },
+                  { id: 'STOCKIST', label: 'Stockist & Retail' },
+                  { id: 'GENERAL', label: 'General Studio' },
+                ].map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setInquiryType(t.id as InquiryType)}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: '999px',
+                      fontSize: '11px',
+                      fontWeight: 500,
+                      border: '1px solid rgba(66, 74, 112, 0.2)',
+                      background: inquiryType === t.id ? '#424a70' : 'transparent',
+                      color: inquiryType === t.id ? '#ffffff' : '#424a70',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
+              <label>
+                Name *
+                <input
+                  required
+                  name="name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Your name"
+                />
+              </label>
+              <label>
+                Email *
+                <input
+                  required
+                  type="email"
+                  name="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                />
+              </label>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
+              <label>
+                Mobile Contact
+                <input
+                  type="tel"
+                  name="phone"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="+91 98401 23456"
+                />
+              </label>
+              <label>
+                Subject
+                <input
+                  name="subject"
+                  value={subject}
+                  onChange={(e) => setSubject(e.target.value)}
+                  placeholder="e.g. 40-Cover Dinnerware Suite"
+                />
+              </label>
+            </div>
+
             <label>
-              Name
-              <input required name="name" placeholder="Your name" />
-            </label>
-            <label>
-              Email
-              <input required type="email" name="email" placeholder="you@example.com" />
-            </label>
-            <label>
-              What can we help with?
+              What can we help with? *
               <textarea
                 required
                 name="message"
-                rows={5}
-                placeholder="Tell us a little about your project..."
+                rows={4}
+                placeholder="Tell us a little about your project, dining concept, or tableware requirements..."
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
               />
             </label>
-            <button className="button" type="submit">
-              {sent ? 'Message received' : 'Send message'} <ArrowUpRight />
+
+            <button className="button" type="submit" disabled={submitting}>
+              {sent ? 'Inquiry Committed' : 'Submit Studio Inquiry'} <ArrowUpRight />
             </button>
             {sent && (
               <p className="form-success" role="status">
-                Thank you. A member of the studio will be in touch shortly.
+                Thank you. A member of our ceramics studio will review your inquiry and be in touch shortly.
               </p>
             )}
           </form>
@@ -688,31 +921,50 @@ function About() {
 export default function Page() {
   const pathname = usePathname()
   return (
-    <BagProvider>
-      <div className="site">
-        <Header />
-        {pathname === '/collection' ? (
-          <Suspense fallback={<main className="page route-loading" aria-label="Loading collection" />}>
-            <Collection />
-          </Suspense>
-        ) : pathname === '/customize' ? (
-          <Suspense fallback={<main className="page route-loading" aria-label="Loading studio" />}>
-            <CustomizeStudio />
-          </Suspense>
-        ) : pathname === '/about' ? (
-          <Suspense fallback={<main className="page route-loading" aria-label="Loading about" />}>
-            <About />
-          </Suspense>
-        ) : pathname === '/contact' ? (
-          <Suspense fallback={<main className="page route-loading" aria-label="Loading contact" />}>
-            <Contact />
-          </Suspense>
-        ) : (
-          <Home />
-        )}
-        <BagDrawer />
-        <BagToast />
-      </div>
-    </BagProvider>
+    <CustomerProvider>
+      <BagProvider>
+        <div className="site">
+          <Header />
+          {pathname === '/collection' ? (
+            <Suspense fallback={<main className="page route-loading" aria-label="Loading collection" />}>
+              <Collection />
+            </Suspense>
+          ) : pathname === '/customize' ? (
+            <Suspense fallback={<main className="page route-loading" aria-label="Loading studio" />}>
+              <CustomizeStudio />
+            </Suspense>
+          ) : pathname === '/about' ? (
+            <Suspense fallback={<main className="page route-loading" aria-label="Loading about" />}>
+              <About />
+            </Suspense>
+          ) : pathname === '/contact' ? (
+            <Suspense fallback={<main className="page route-loading" aria-label="Loading contact" />}>
+              <Contact />
+            </Suspense>
+          ) : pathname === '/account' ? (
+            <Suspense fallback={<main className="page route-loading" aria-label="Loading patron portal" />}>
+              <AccountPortal />
+            </Suspense>
+          ) : pathname === '/checkout' ? (
+            <Suspense fallback={<main className="page route-loading" aria-label="Loading checkout" />}>
+              <CheckoutPage />
+            </Suspense>
+          ) : pathname === '/cart' ? (
+            <Suspense fallback={<main className="page route-loading" aria-label="Loading shopping bag" />}>
+              <CartPage />
+            </Suspense>
+          ) : pathname === '/track' ? (
+            <Suspense fallback={<main className="page route-loading" aria-label="Loading consignment tracking" />}>
+              <TrackPage />
+            </Suspense>
+          ) : (
+            <Home />
+          )}
+          <BagDrawer />
+          <BagToast />
+          <CustomerAuthModal />
+        </div>
+      </BagProvider>
+    </CustomerProvider>
   )
 }

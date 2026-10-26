@@ -6,6 +6,7 @@ import Image from 'next/image'
 import { CustomizableProduct } from '@/lib/customize/types'
 import { CUSTOMIZABLE_PRODUCTS } from '@/lib/customize/products'
 import { ArrowUpRight, Search, X } from 'lucide-react'
+import { UnifortButton } from '@/components/ui/UnifortButton'
 
 interface ProductSwitcherModalProps {
   isOpen: boolean
@@ -73,17 +74,16 @@ export function ProductSwitcherModal({
           </div>
           <div className="flex gap-1.5 overflow-x-auto w-full sm:w-auto">
             {categories.map((cat) => (
-              <button
+              <UnifortButton
                 key={cat}
+                variant="tab"
+                active={selectedCategory === cat}
+                size="xxs"
+                rounded="lg"
                 onClick={() => setSelectedCategory(cat)}
-                className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors whitespace-nowrap ${
-                  selectedCategory === cat
-                    ? 'tab-active bg-[#424a70] !text-white [&_*]:!text-white shadow-xs'
-                    : 'bg-white border border-[rgba(66,74,112,0.15)] text-[#687194] hover:text-[#1c2033]'
-                }`}
               >
                 {cat}
-              </button>
+              </UnifortButton>
             ))}
           </div>
         </div>

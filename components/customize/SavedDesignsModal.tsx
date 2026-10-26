@@ -10,6 +10,7 @@ import {
   renameSavedDesign,
 } from '@/lib/customize/storage'
 import { Copy, Edit2, FolderOpen, Play, Trash2, X } from 'lucide-react'
+import { UnifortButton } from '@/components/ui/UnifortButton'
 
 interface SavedDesignsModalProps {
   isOpen: boolean
@@ -133,12 +134,13 @@ export function SavedDesignsModal({ isOpen, onClose, onLoadDesign }: SavedDesign
                               if (e.key === 'Escape') setEditingId(null)
                             }}
                           />
-                          <button
+                          <UnifortButton
+                            variant="primary"
+                            size="xxs"
                             onClick={() => handleSaveRename(d.id)}
-                            className="text-[10px] bg-[#424a70] text-white px-2 py-0.5 rounded"
                           >
                             Save
-                          </button>
+                          </UnifortButton>
                         </div>
                       ) : (
                         <div className="flex items-center gap-1.5">
@@ -164,33 +166,34 @@ export function SavedDesignsModal({ isOpen, onClose, onLoadDesign }: SavedDesign
                   </div>
 
                   {/* Actions */}
-                  <div className="flex items-center justify-between pt-2 border-t border-[rgba(66,74,112,0.1)] mt-auto">
-                    <button
+                  <div className="flex items-center justify-between pt-2.5 border-t border-[rgba(66,74,112,0.12)] mt-auto">
+                    <UnifortButton
+                      variant="primary"
+                      size="xs"
+                      icon={<Play className="w-3 h-3 fill-current" />}
                       onClick={() => {
                         onLoadDesign(d)
                         onClose()
                       }}
-                      className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-gradient-to-r from-[#424a70] to-[#2e3452] hover:shadow-xs rounded-lg transition-all"
                     >
-                      <Play className="w-3 h-3 fill-current" />
                       Open in Studio
-                    </button>
+                    </UnifortButton>
 
-                    <div className="flex items-center gap-1">
-                      <button
+                    <div className="flex items-center gap-1.5">
+                      <UnifortButton
+                        variant="outline"
+                        size="xs"
+                        icon={<Copy className="w-3.5 h-3.5" />}
                         onClick={() => handleDuplicate(d.id)}
-                        className="p-1.5 text-[#687194] hover:text-[#1c2033] hover:bg-slate-100 rounded-md"
-                        title="Duplicate"
-                      >
-                        <Copy className="w-3.5 h-3.5" />
-                      </button>
-                      <button
+                        title="Duplicate Design"
+                      />
+                      <UnifortButton
+                        variant="danger-outline"
+                        size="xs"
+                        icon={<Trash2 className="w-3.5 h-3.5" />}
                         onClick={() => handleDelete(d.id)}
-                        className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-md"
-                        title="Delete"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                        title="Delete Design"
+                      />
                     </div>
                   </div>
                 </div>

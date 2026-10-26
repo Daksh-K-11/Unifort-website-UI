@@ -6,6 +6,8 @@ import { CustomizableProduct, DesignTemplate } from '@/lib/customize/types'
 import { DESIGN_TEMPLATES } from '@/lib/customize/templates'
 import { LayoutTemplate, Sparkles } from 'lucide-react'
 
+import { UnifortButton } from '@/components/ui/UnifortButton'
+
 interface TemplatePanelProps {
   product: CustomizableProduct
   onApplyTemplate: (template: DesignTemplate) => void
@@ -53,13 +55,15 @@ export function TemplatePanel({ product, onApplyTemplate }: TemplatePanelProps) 
               </span>
             </div>
             <p className="text-[11px] text-[#687194] leading-relaxed mb-3">{template.description}</p>
-            <button
+            <UnifortButton
               onClick={() => setConfirmTemplate(template)}
-              className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-semibold text-[#424a70] bg-[#424a70]/10 hover:bg-[#424a70] hover:text-white rounded-lg transition-all shadow-2xs"
+              variant="outline"
+              size="sm"
+              fullWidth
+              icon={<Sparkles className="w-3.5 h-3.5" />}
             >
-              <Sparkles className="w-3.5 h-3.5" />
               Load Composition
-            </button>
+            </UnifortButton>
           </div>
         ))}
       </div>
@@ -75,18 +79,20 @@ export function TemplatePanel({ product, onApplyTemplate }: TemplatePanelProps) 
               This will apply the template&rsquo;s glazes, typography, and motifs to your current piece. Any existing artwork layers will be replaced.
             </p>
             <div className="flex items-center justify-end gap-2.5">
-              <button
+              <UnifortButton
                 onClick={() => setConfirmTemplate(null)}
-                className="px-4 py-2 text-xs font-semibold text-[#687194] hover:text-[#1c2033] rounded-lg transition-colors"
+                variant="ghost"
+                size="sm"
               >
                 Cancel
-              </button>
-              <button
+              </UnifortButton>
+              <UnifortButton
                 onClick={() => handleApply(confirmTemplate)}
-                className="px-4 py-2 text-xs font-semibold text-white bg-gradient-to-r from-[#424a70] to-[#2e3452] rounded-lg hover:shadow-xs transition-all"
+                variant="primary"
+                size="sm"
               >
                 Apply Template
-              </button>
+              </UnifortButton>
             </div>
           </div>
         </div>,

@@ -14,6 +14,7 @@ import {
   Plus,
   Type,
 } from 'lucide-react'
+import { UnifortButton } from '@/components/ui/UnifortButton'
 
 interface TextPanelProps {
   activeSurfaceId: string
@@ -115,13 +116,15 @@ export function TextPanel({
   return (
     <div className="tool-panel-content flex flex-col gap-5 p-4">
       {/* Primary Add Action */}
-      <button
+      <UnifortButton
+        variant="primary"
+        size="md"
+        fullWidth
+        icon={<Plus className="w-4 h-4" />}
         onClick={handleAddDefaultText}
-        className="button w-full justify-center !py-2.5 !text-xs !shadow-[0_8px_20px_rgba(66,74,112,0.2)]"
       >
-        <Plus className="w-4 h-4" />
-        <span>Add New Text Layer</span>
-      </button>
+        Add New Text Layer
+      </UnifortButton>
 
       {/* Layer selector tabs if multiple text layers exist */}
       {surfaceTextElements.length > 1 && (
@@ -133,17 +136,15 @@ export function TextPanel({
             {surfaceTextElements.map((el, idx) => {
               const isSelected = activeText?.id === el.id
               return (
-                <button
+                <UnifortButton
                   key={el.id}
+                  variant="tab"
+                  active={isSelected}
+                  size="xs"
                   onClick={() => onSelectElement && onSelectElement(el.id)}
-                  className={`px-3 py-1 text-xs rounded-md font-medium transition-all whitespace-nowrap ${
-                    isSelected
-                      ? 'tab-active bg-[#424a70] !text-white [&_*]:!text-white shadow-xs'
-                      : 'bg-white/80 border border-[rgba(66,74,112,0.15)] text-[#687194] hover:text-[#1c2033]'
-                  }`}
                 >
                   Text #{idx + 1}: &ldquo;{el.text?.slice(0, 12) || 'Text'}&rdquo;
-                </button>
+                </UnifortButton>
               )
             })}
           </div>
