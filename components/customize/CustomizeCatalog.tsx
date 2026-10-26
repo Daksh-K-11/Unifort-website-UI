@@ -4,7 +4,7 @@ import React, { useState } from 'react'
 import Image from 'next/image'
 import { CustomizableProduct } from '@/lib/customize/types'
 import { CUSTOMIZABLE_PRODUCTS } from '@/lib/customize/products'
-import { ArrowUpRight, Bookmark, Check, Move3d, Palette, Search, ShieldCheck, Sparkles } from 'lucide-react'
+import { ArrowUpRight, Bookmark, Check, Move3d, Palette, Search, ShieldCheck, Sparkles, FolderOpen } from 'lucide-react'
 import { UnifortButton } from '@/components/ui/UnifortButton'
 
 interface CustomizeCatalogProps {
@@ -95,9 +95,9 @@ export function CustomizeCatalog({
               title="Browse your saved designs"
             >
               <span className="w-5 h-5 rounded-full bg-[rgba(66,74,112,0.08)] group-hover:bg-[#424a70] text-[#424a70] group-hover:text-white flex items-center justify-center transition-colors">
-                <Bookmark className="w-3 h-3" />
+                <FolderOpen className="w-3 h-3" />
               </span>
-              <span>Saved Designs</span>
+              <span>Save</span>
               {savedCount > 0 ? (
                 <span className="px-1.5 py-0.2 text-[10px] font-bold rounded-full bg-[#424a70] text-white">
                   {savedCount}
