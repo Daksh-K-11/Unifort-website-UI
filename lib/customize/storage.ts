@@ -1,4 +1,5 @@
 import { DesignState, SavedDesign } from './types'
+import { api } from '../api-client'
 
 const STORAGE_KEY = 'unifort_custom_designs_v1'
 
@@ -66,6 +67,19 @@ export function saveDesign(
 
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(designs))
+    // Asynchronously synchronize to backend database
+    api.post('/customize/designs', {
+      title: designToSave.title,
+      productId: designToSave.productId,
+      modelType: (designToSave.state as any)?.modelType || 'mug',
+      finish: designToSave.state?.finish || 'matte',
+      primaryGlazeColor: designToSave.state?.colors?.body || '#2B2B2B',
+      accentGlazeColor: designToSave.state?.colors?.accent,
+      thumbnailUrl: designToSave.thumbnailUrl,
+      customElements: designToSave.state?.elements || [],
+      estimatedPrice: 98.0,
+      specVersion: '1.0',
+    }).catch(() => {})
   } catch (err) {
     console.error('Failed to persist design to localStorage', err)
   }

@@ -116,6 +116,8 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
 
       sessionStorage.setItem(STORAGE_TOKEN_KEY, authToken)
       sessionStorage.setItem(STORAGE_USER_KEY, JSON.stringify(adminUser))
+      localStorage.setItem(STORAGE_TOKEN_KEY, authToken)
+      localStorage.setItem(STORAGE_USER_KEY, JSON.stringify(adminUser))
 
       return { success: true }
     } catch (err: any) {
@@ -135,8 +137,10 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
     try {
       sessionStorage.removeItem(STORAGE_TOKEN_KEY)
       sessionStorage.removeItem(STORAGE_USER_KEY)
+      localStorage.removeItem(STORAGE_TOKEN_KEY)
+      localStorage.removeItem(STORAGE_USER_KEY)
     } catch {
-      // Ignore sessionStorage errors
+      // Ignore storage errors
     }
   }
 

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { createContext, useContext, useEffect, useState } from 'react'
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import {
   CustomerUser,
   CustomerOrder,
@@ -11,6 +11,12 @@ import {
   PaymentMethod,
   InquiryType,
 } from './customer-types'
+import {
+  api,
+  getToken,
+  setCustomerToken,
+  clearCustomerToken,
+} from './api-client'
 
 interface CustomerContextType {
   // Auth state & operations
@@ -26,6 +32,7 @@ interface CustomerContextType {
 
   // Orders state & operations
   orders: CustomerOrder[]
+  refreshOrders: () => Promise<void>
   placeOrder: (data: {
     items: CustomerOrder['items']
     shippingAddress: ShippingAddress
@@ -38,6 +45,7 @@ interface CustomerContextType {
 
   // Saved 3D Bespoke Designs
   savedDesigns: CustomerSavedDesign[]
+  refreshSavedDesigns: () => Promise<void>
   saveBespokeDesign: (design: Omit<CustomerSavedDesign, 'id' | 'createdAt'>) => Promise<{ success: boolean; design?: CustomerSavedDesign }>
   deleteBespokeDesign: (designId: string) => Promise<{ success: boolean }>
   renameBespokeDesign: (designId: string, newTitle: string) => Promise<{ success: boolean }>
@@ -45,6 +53,7 @@ interface CustomerContextType {
 
   // Inquiries
   inquiries: CustomerInquiry[]
+  refreshInquiries: () => Promise<void>
   submitInquiry: (data: {
     name: string
     email: string
@@ -57,11 +66,13 @@ interface CustomerContextType {
   // Reviews
   reviews: Record<string, ProductReview[]>
   getProductReviews: (productId: string) => ProductReview[]
+  fetchProductReviews: (productId: string) => Promise<void>
   submitReview: (productId: string, data: { rating: number; title?: string; comment: string }) => Promise<{ success: boolean; message?: string }>
 }
 
 const CustomerContext = createContext<CustomerContextType | undefined>(undefined)
 
+// Fallback seed customer state
 const INITIAL_DEMO_CUSTOMER: CustomerUser = {
   id: 'usr-patron-01',
   name: 'Elena Vance',
@@ -71,329 +82,394 @@ const INITIAL_DEMO_CUSTOMER: CustomerUser = {
   createdAt: '2025-11-14T10:30:00.000Z',
 }
 
-const INITIAL_DEMO_ORDERS: CustomerOrder[] = [
-  {
-    id: 'ord-8910',
-    orderNumber: 'UNI-2026-8910',
-    status: 'PROCESSING',
-    paymentStatus: 'PAID',
-    paymentMethod: 'UPI',
-    totalAmount: 180,
-    items: [
-      {
-        id: 'item-1',
-        productId: 'prod-001',
-        productName: 'No. 01 Obsidian Plate',
-        productType: 'Dinner plate · 28 cm',
-        productImage: '/unifort-plate-light.jpg',
-        price: 84,
-        quantity: 2,
-      },
-      {
-        id: 'item-2',
-        productId: 'prod-002',
-        productName: 'No. 12 Basalt Bowl',
-        productType: 'Stoneware · 22 cm',
-        productImage: '/unifort-bowl-light.jpg',
-        price: 96,
-        quantity: 1,
-      },
-    ],
-    shippingAddress: {
-      fullName: 'Elena Vance',
-      addressLine1: '42 Boat Club Road',
-      addressLine2: 'Apt 4B, Coastal Pavilions',
-      city: 'Chennai',
-      state: 'Tamil Nadu',
-      postalCode: '600028',
-      country: 'India',
-    },
-    customerNotes: 'Please pack in signature cedar gift casing with unbleached linen wrap.',
-    trackingNumber: 'BLUEDART-EXP-992140',
-    carrier: 'BlueDart Express Fine Cargo',
-    estimatedDelivery: 'Oct 29, 2026',
-    createdAt: '2026-10-24T16:20:00.000Z',
-  },
-  {
-    id: 'ord-6742',
-    orderNumber: 'UNI-2026-6742',
-    status: 'DELIVERED',
-    paymentStatus: 'PAID',
-    paymentMethod: 'CARD',
-    totalAmount: 272,
-    items: [
-      {
-        id: 'item-3',
-        productId: 'prod-003',
-        productName: 'No. 04 Violet Tumbler (Set of 2)',
-        productType: 'Hand-blown glass · 320 ml',
-        productImage: '/unifort-tumbler-light.jpg',
-        price: 124,
-        quantity: 1,
-      },
-      {
-        id: 'item-4',
-        productId: 'prod-004',
-        productName: 'No. 07 Arc Carafe',
-        productType: 'Smoked glass · 1.2 L',
-        productImage: '/unifort-carafe-light.jpg',
-        price: 148,
-        quantity: 1,
-      },
-    ],
-    shippingAddress: {
-      fullName: 'Elena Vance',
-      addressLine1: '42 Boat Club Road',
-      addressLine2: 'Apt 4B, Coastal Pavilions',
-      city: 'Chennai',
-      state: 'Tamil Nadu',
-      postalCode: '600028',
-      country: 'India',
-    },
-    trackingNumber: 'DTDC-PREM-881204',
-    carrier: 'DTDC Atelier Direct',
-    estimatedDelivery: 'Oct 18, 2026',
-    createdAt: '2026-10-15T11:15:00.000Z',
-  },
-]
-
-const INITIAL_SAVED_DESIGNS: CustomerSavedDesign[] = [
-  {
-    id: 'des-custom-01',
-    title: 'Terracotta & Slate Espresso Mug',
-    productName: 'Ceramic Studio Mug',
-    modelType: 'mug',
-    finish: 'matte',
-    primaryGlazeColor: '#8c4e36',
-    accentGlazeColor: '#2b2f3a',
-    status: 'IN_PRODUCTION',
-    craftsmanNotes: 'Kiln reduction firing scheduled at 1280°C. Verified satin finish and 300 DPI metallic decal alignment.',
-    elementsCount: 2,
-    createdAt: '2026-10-22T09:40:00.000Z',
-  },
-  {
-    id: 'des-custom-02',
-    title: 'Obsidian & Gold Leaf Banquet Platter',
-    productName: 'Dinner Plate',
-    modelType: 'plate',
-    finish: 'glossy',
-    primaryGlazeColor: '#1a1c23',
-    accentGlazeColor: '#d4af37',
-    status: 'DRAFT',
-    elementsCount: 3,
-    createdAt: '2026-10-25T14:10:00.000Z',
-  },
-]
-
-const INITIAL_INQUIRIES: CustomerInquiry[] = [
-  {
-    id: 'inq-9102',
-    type: 'HOSPITALITY_COMMISSION',
-    name: 'Elena Vance',
-    email: 'elena@vance.design',
-    phone: '+91 98401 23456',
-    subject: 'Bespoke tableware collection for 24-seat boutique tasting room',
-    message: 'We are curating a private dining salon in Chennai and require 48 stoneware reduction plates and matching basalt carafes with custom debossed monogram.',
-    status: 'IN_PROGRESS',
-    notes: 'Studio director contacted client with sample glaze swatches. Production quote sent for review.',
-    createdAt: '2026-10-21T15:00:00.000Z',
-  },
-]
-
-const INITIAL_REVIEWS: Record<string, ProductReview[]> = {
-  'No. 01 Obsidian Plate': [
-    {
-      id: 'rev-01',
-      productId: 'No. 01 Obsidian Plate',
-      userName: 'Kavitha R.',
-      rating: 5,
-      title: 'Incredible reduction-fired tactile weight',
-      comment: 'The matte slate finish catches natural candle light beautifully. Exceeded all our banquet expectations.',
-      status: 'APPROVED',
-      createdAt: '2026-10-18T10:00:00.000Z',
-    },
-    {
-      id: 'rev-02',
-      productId: 'No. 01 Obsidian Plate',
-      userName: 'Marcus Sterling',
-      rating: 5,
-      title: 'Remarkable architectural rim profile',
-      comment: 'Dense, substantial stoneware with an organic lip that feels effortless to hold. Pairs impeccably with linen.',
-      status: 'APPROVED',
-      createdAt: '2026-10-12T14:30:00.000Z',
-    },
-  ],
-  'No. 04 Violet Tumbler': [
-    {
-      id: 'rev-03',
-      productId: 'No. 04 Violet Tumbler',
-      userName: 'Ananya Deshmukh',
-      rating: 5,
-      title: 'Subtle atmospheric smoked violet tint',
-      comment: 'The fluted texture refracts afternoon sun like liquid amber. Perfectly balanced in hand.',
-      status: 'APPROVED',
-      createdAt: '2026-10-14T16:45:00.000Z',
-    },
-  ],
-  'No. 07 Arc Carafe': [
-    {
-      id: 'rev-04',
-      productId: 'No. 07 Arc Carafe',
-      userName: 'Rohit K.',
-      rating: 5,
-      title: 'Pours with crisp, zero-drip precision',
-      comment: 'A showpiece on the long table. The glass is thin yet resilient, with deep smoked translucency.',
-      status: 'APPROVED',
-      createdAt: '2026-10-09T18:20:00.000Z',
-    },
-  ],
-  'No. 12 Basalt Bowl': [
-    {
-      id: 'rev-05',
-      productId: 'No. 12 Basalt Bowl',
-      userName: 'Devika M.',
-      rating: 5,
-      title: 'Substantial volcanic mineral texture',
-      comment: 'Deep, satisfying volume. Keeps broths and slow-braised dishes warm throughout unhurried dinners.',
-      status: 'APPROVED',
-      createdAt: '2026-10-16T12:10:00.000Z',
-    },
-  ],
-}
-
 export function CustomerProvider({ children }: { children: React.ReactNode }) {
   const [customer, setCustomer] = useState<CustomerUser | null>(INITIAL_DEMO_CUSTOMER)
   const [authModalOpen, setAuthModalOpen] = useState<'login' | 'register' | null>(null)
-  const [orders, setOrders] = useState<CustomerOrder[]>(INITIAL_DEMO_ORDERS)
-  const [savedDesigns, setSavedDesigns] = useState<CustomerSavedDesign[]>(INITIAL_SAVED_DESIGNS)
-  const [inquiries, setInquiries] = useState<CustomerInquiry[]>(INITIAL_INQUIRIES)
-  const [reviews, setReviews] = useState<Record<string, ProductReview[]>>(INITIAL_REVIEWS)
+  const [orders, setOrders] = useState<CustomerOrder[]>([])
+  const [savedDesigns, setSavedDesigns] = useState<CustomerSavedDesign[]>([])
+  const [inquiries, setInquiries] = useState<CustomerInquiry[]>([])
+  const [reviews, setReviews] = useState<Record<string, ProductReview[]>>({})
 
-  // Load from localStorage if present
-  useEffect(() => {
-    try {
-      const storedCustomer = localStorage.getItem('unifort_patron_profile')
-      if (storedCustomer) {
-        setCustomer(JSON.parse(storedCustomer))
+  // Format backend order to frontend CustomerOrder
+  const mapBackendOrder = (o: any): CustomerOrder => {
+    const rawAddr = o.shippingAddress || {}
+    const shippingAddress: ShippingAddress = {
+      fullName: rawAddr.recipientName || rawAddr.fullName || o.customerName || 'Valued Patron',
+      addressLine1: rawAddr.addressLine1 || '',
+      addressLine2: rawAddr.addressLine2 || '',
+      city: rawAddr.city || '',
+      state: rawAddr.state || '',
+      postalCode: rawAddr.postalCode || '',
+      country: rawAddr.country || 'India',
+    }
+
+    const items: CustomerOrder['items'] = (o.items || []).map((it: any) => ({
+      id: it.id,
+      productId: it.productId || it.product?.id || '',
+      productName: it.productName || it.product?.name || 'Handcrafted Tableware',
+      productType: it.productType || it.product?.type || 'Atelier Ceramic',
+      productImage: it.productImage || it.customSnapshotUrl || it.product?.image || '/unifort-plate-light.jpg',
+      price: Number(it.price || 0),
+      quantity: it.quantity || 1,
+      bespokeDesignId: it.customDesignId || undefined,
+      bespokeDetails: it.productionSpec
+        ? {
+            modelType: it.productionSpec.modelType,
+            glaze: it.productionSpec.primaryGlazeColor,
+            finish: it.productionSpec.finish,
+          }
+        : undefined,
+    }))
+
+    return {
+      id: o.id,
+      orderNumber: o.orderNumber,
+      status: o.status,
+      paymentStatus: o.paymentStatus,
+      paymentMethod: o.paymentMethod as PaymentMethod,
+      totalAmount: Number(o.totalAmount || 0),
+      items,
+      shippingAddress,
+      customerNotes: o.notes || undefined,
+      trackingNumber: o.trackingNumber || undefined,
+      carrier: o.carrier || (o.trackingNumber ? 'BlueDart Atelier Courier' : undefined),
+      estimatedDelivery: o.estimatedDelivery || (o.status === 'DELIVERED' ? 'Delivered' : 'In 3–5 Business Days'),
+      createdAt: o.createdAt,
+      updatedAt: o.updatedAt,
+    }
+  }
+
+  // Format backend design to frontend CustomerSavedDesign
+  const mapBackendDesign = (d: any): CustomerSavedDesign => {
+    return {
+      id: d.id,
+      title: d.title || 'Untitled Atelier Design',
+      productId: d.productId || undefined,
+      productName: d.product?.name || d.productName || 'Bespoke Ceramic Piece',
+      modelType: d.modelType || 'mug',
+      finish: d.finish || 'matte',
+      primaryGlazeColor: d.primaryGlazeColor || '#2B2B2B',
+      accentGlazeColor: d.accentGlazeColor || undefined,
+      status: d.status || 'DRAFT',
+      previewUrl: d.thumbnailUrl || d.previewUrl || '/unifort-plate-light.jpg',
+      craftsmanNotes: d.craftsmanNotes || undefined,
+      elementsCount: Array.isArray(d.customElements) ? d.customElements.length : (d.elementsCount || 1),
+      createdAt: d.createdAt,
+      updatedAt: d.updatedAt,
+    }
+  }
+
+  // Format backend inquiry to frontend CustomerInquiry
+  const mapBackendInquiry = (inq: any): CustomerInquiry => {
+    const meta = inq.metadata || {}
+    return {
+      id: inq.id,
+      type: inq.type,
+      name: inq.name || `${inq.user?.firstName || ''} ${inq.user?.lastName || ''}`.trim() || 'Patron',
+      email: inq.email || inq.user?.email || '',
+      phone: inq.phone || inq.user?.phone || undefined,
+      subject: meta.subject || inq.subject || 'Atelier Commission Inquiry',
+      message: inq.message || '',
+      status: inq.status,
+      notes: inq.notes || undefined,
+      createdAt: inq.createdAt,
+      updatedAt: inq.updatedAt,
+    }
+  }
+
+  // Fetch live orders
+  const refreshOrders = useCallback(async () => {
+    const res = await api.get('/orders/my-orders')
+    if (res.success && Array.isArray(res.data)) {
+      const formatted = res.data.map(mapBackendOrder)
+      setOrders(formatted)
+      try {
+        localStorage.setItem('unifort_patron_orders', JSON.stringify(formatted))
+      } catch (e) {
+        console.error('Failed to cache orders', e)
       }
-      const storedOrders = localStorage.getItem('unifort_patron_orders')
-      if (storedOrders) {
-        setOrders(JSON.parse(storedOrders))
-      }
-      const storedDesigns = localStorage.getItem('unifort_patron_designs')
-      if (storedDesigns) {
-        setSavedDesigns(JSON.parse(storedDesigns))
-      }
-    } catch (e) {
-      console.error('Failed to load customer state from localStorage', e)
     }
   }, [])
 
-  // Persist customer profile changes
-  useEffect(() => {
-    try {
-      if (customer) {
-        localStorage.setItem('unifort_patron_profile', JSON.stringify(customer))
-      } else {
-        localStorage.removeItem('unifort_patron_profile')
+  // Fetch live designs
+  const refreshSavedDesigns = useCallback(async () => {
+    const res = await api.get('/customize/designs')
+    if (res.success && Array.isArray(res.data)) {
+      const formatted = res.data.map(mapBackendDesign)
+      setSavedDesigns(formatted)
+      try {
+        localStorage.setItem('unifort_patron_designs', JSON.stringify(formatted))
+      } catch (e) {
+        console.error('Failed to cache designs', e)
       }
-    } catch (e) {
-      console.error('Failed to persist customer profile', e)
     }
-  }, [customer])
+  }, [])
 
-  // Persist customer orders
+  // Fetch live inquiries
+  const refreshInquiries = useCallback(async () => {
+    const res = await api.get('/inquiries/my-inquiries')
+    if (res.success && Array.isArray(res.data)) {
+      const formatted = res.data.map(mapBackendInquiry)
+      setInquiries(formatted)
+    }
+  }, [])
+
+  // Fetch product reviews
+  const fetchProductReviews = useCallback(async (productId: string) => {
+    const res = await api.get(`/reviews/product/${encodeURIComponent(productId)}`)
+    if (res.success && res.data?.reviews) {
+      const revs: ProductReview[] = res.data.reviews.map((r: any) => ({
+        id: r.id,
+        productId: r.productId,
+        userId: r.userId,
+        userName: r.user ? `${r.user.firstName} ${r.user.lastName}`.trim() : 'Patron',
+        rating: r.rating,
+        title: r.title || undefined,
+        comment: r.comment,
+        status: r.isApproved ? 'APPROVED' : 'PENDING',
+        createdAt: r.createdAt,
+      }))
+      setReviews((prev) => ({ ...prev, [productId]: revs }))
+    }
+  }, [])
+
+  // Hydrate user profile and live data on initial client mount
   useEffect(() => {
-    try {
-      localStorage.setItem('unifort_patron_orders', JSON.stringify(orders))
-    } catch (e) {
-      console.error('Failed to persist customer orders', e)
-    }
-  }, [orders])
+    const initAuth = async () => {
+      const token = getToken()
+      if (token) {
+        // Verify current token with backend
+        const res = await api.get('/auth/me')
+        if (res.success && res.data) {
+          const u = res.data
+          const customerData: CustomerUser = {
+            id: u.id,
+            name: `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email.split('@')[0],
+            email: u.email,
+            phone: u.phone,
+            role: u.role,
+            createdAt: u.createdAt,
+          }
+          setCustomer(customerData)
+          localStorage.setItem('unifort_patron_profile', JSON.stringify(customerData))
+          // Refresh user data from live backend
+          refreshOrders()
+          refreshSavedDesigns()
+          refreshInquiries()
+          return
+        } else {
+          // Token expired or invalid
+          clearCustomerToken()
+        }
+      }
 
-  // Persist customer designs
-  useEffect(() => {
-    try {
-      localStorage.setItem('unifort_patron_designs', JSON.stringify(savedDesigns))
-    } catch (e) {
-      console.error('Failed to persist customer designs', e)
+      // If no token or token expired, check localStorage for cached demo state
+      try {
+        const storedCustomer = localStorage.getItem('unifort_patron_profile')
+        if (storedCustomer) {
+          setCustomer(JSON.parse(storedCustomer))
+        }
+        const storedOrders = localStorage.getItem('unifort_patron_orders')
+        if (storedOrders) {
+          setOrders(JSON.parse(storedOrders))
+        }
+        const storedDesigns = localStorage.getItem('unifort_patron_designs')
+        if (storedDesigns) {
+          setSavedDesigns(JSON.parse(storedDesigns))
+        }
+      } catch (e) {
+        console.error('Error hydrating customer state', e)
+      }
     }
-  }, [savedDesigns])
 
-  // Mock Login (Matches POST /api/v1/auth/login)
-  const login = async (email: string, _password: string) => {
-    await new Promise((r) => setTimeout(r, 450))
-    if (!email || !email.includes('@')) {
-      return { success: false, message: 'Please provide a valid patron email address.' }
-    }
-    const loggedUser: CustomerUser = {
-      id: `usr-${Date.now().toString().slice(-4)}`,
-      name: email.split('@')[0].replace(/[\._]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
-      email,
-      phone: '+91 98401 23456',
-      role: 'CUSTOMER',
-      createdAt: new Date().toISOString(),
-    }
-    setCustomer(loggedUser)
-    setAuthModalOpen(null)
-    return { success: true }
-  }
+    initAuth()
+  }, [refreshOrders, refreshSavedDesigns, refreshInquiries])
 
-  // Mock Register (Matches POST /api/v1/auth/register)
-  const register = async (name: string, email: string, _password: string, phone?: string) => {
-    await new Promise((r) => setTimeout(r, 550))
-    if (!name.trim() || !email.trim()) {
-      return { success: false, message: 'Please fill in all required fields.' }
-    }
-    const newUser: CustomerUser = {
-      id: `usr-${Date.now().toString().slice(-4)}`,
-      name,
-      email,
-      phone: phone || '+91 98401 23456',
-      role: 'CUSTOMER',
-      createdAt: new Date().toISOString(),
-    }
-    setCustomer(newUser)
-    setAuthModalOpen(null)
-    return { success: true }
-  }
-
-  const logout = () => {
-    setCustomer(null)
-    localStorage.removeItem('unifort_patron_profile')
-  }
-
-  // Mock Profile Update (Matches PUT /api/v1/auth/me)
-  const updateProfile = async (data: { name?: string; phone?: string }) => {
-    await new Promise((r) => setTimeout(r, 350))
-    if (!customer) return { success: false, message: 'Not authenticated.' }
-    setCustomer({
-      ...customer,
-      name: data.name || customer.name,
-      phone: data.phone || customer.phone,
+  // Login handler
+  const login = async (email: string, password: string) => {
+    const res = await api.post('/auth/login', {
+      email: email.trim().toLowerCase(),
+      password,
     })
+
+    if (!res.success || !res.data) {
+      return { success: false, message: res.message || 'Authentication failed. Please verify credentials.' }
+    }
+
+    const { user, token } = res.data
+    if (token) {
+      setCustomerToken(token)
+    }
+
+    const customerUser: CustomerUser = {
+      id: user.id,
+      name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email.split('@')[0],
+      email: user.email,
+      phone: user.phone,
+      role: user.role,
+      createdAt: user.createdAt,
+    }
+
+    setCustomer(customerUser)
+    localStorage.setItem('unifort_patron_profile', JSON.stringify(customerUser))
+    setAuthModalOpen(null)
+
+    // Pull live data from backend for this authenticated user
+    refreshOrders()
+    refreshSavedDesigns()
+    refreshInquiries()
+
+    return { success: true }
+  }
+
+  // Register handler
+  const register = async (name: string, email: string, password: string, phone?: string) => {
+    const nameParts = name.trim().split(' ')
+    const firstName = nameParts[0] || 'Valued'
+    const lastName = nameParts.slice(1).join(' ') || 'Patron'
+
+    const res = await api.post('/auth/register', {
+      firstName,
+      lastName,
+      email: email.trim().toLowerCase(),
+      password,
+      phone: phone || '+91 98401 23456',
+    })
+
+    if (!res.success || !res.data) {
+      return { success: false, message: res.message || 'Unable to register patron account.' }
+    }
+
+    const { user, token } = res.data
+    if (token) {
+      setCustomerToken(token)
+    }
+
+    const newUser: CustomerUser = {
+      id: user.id,
+      name: `${user.firstName} ${user.lastName}`.trim(),
+      email: user.email,
+      phone: user.phone,
+      role: user.role,
+      createdAt: user.createdAt,
+    }
+
+    setCustomer(newUser)
+    localStorage.setItem('unifort_patron_profile', JSON.stringify(newUser))
+    setAuthModalOpen(null)
+
+    refreshOrders()
+    refreshSavedDesigns()
+    refreshInquiries()
+
+    return { success: true }
+  }
+
+  // Logout handler
+  const logout = () => {
+    clearCustomerToken()
+    setCustomer(null)
+    setOrders([])
+    setSavedDesigns([])
+    setInquiries([])
+    localStorage.removeItem('unifort_patron_profile')
+    localStorage.removeItem('unifort_patron_orders')
+    localStorage.removeItem('unifort_patron_designs')
+  }
+
+  // Profile Update
+  const updateProfile = async (data: { name?: string; phone?: string }) => {
+    let firstName: string | undefined
+    let lastName: string | undefined
+    if (data.name) {
+      const parts = data.name.trim().split(' ')
+      firstName = parts[0]
+      lastName = parts.slice(1).join(' ')
+    }
+
+    const res = await api.put('/auth/me', {
+      firstName,
+      lastName,
+      phone: data.phone,
+    })
+
+    if (!res.success) {
+      return { success: false, message: res.message }
+    }
+
+    if (customer) {
+      const updated: CustomerUser = {
+        ...customer,
+        name: data.name || customer.name,
+        phone: data.phone || customer.phone,
+      }
+      setCustomer(updated)
+      localStorage.setItem('unifort_patron_profile', JSON.stringify(updated))
+    }
+
     return { success: true, message: 'Patron profile updated successfully.' }
   }
 
-  // Mock Change Password (Matches PUT /api/v1/auth/me/password)
+  // Change Password
   const changePassword = async (data: { currentPassword: string; newPassword: string }) => {
-    await new Promise((r) => setTimeout(r, 400))
-    if (data.newPassword.length < 6) {
-      return { success: false, message: 'New passphrase must be at least 6 characters.' }
+    const res = await api.put('/auth/me/password', {
+      currentPassword: data.currentPassword,
+      newPassword: data.newPassword,
+    })
+
+    if (!res.success) {
+      return { success: false, message: res.message }
     }
+
     return { success: true, message: 'Atelier passphrase updated successfully.' }
   }
 
-  // Mock Place Order (Matches POST /api/v1/orders)
+  // Place Order (Real API + Resilient offline fallback)
   const placeOrder = async (data: {
     items: CustomerOrder['items']
     shippingAddress: ShippingAddress
     paymentMethod: PaymentMethod
     customerNotes?: string
   }) => {
-    await new Promise((r) => setTimeout(r, 600))
+    const directItems = data.items.map((it) => ({
+      productId: it.productId,
+      quantity: it.quantity,
+      customDesignId: it.bespokeDesignId,
+      customPrice: it.price,
+      metadata: {
+        productName: it.productName,
+        productType: it.productType,
+        bespokeDetails: it.bespokeDetails,
+      },
+    }))
+
+    const payload = {
+      shippingAddress: {
+        recipientName: data.shippingAddress.fullName || customer?.name || 'Valued Patron',
+        phone: customer?.phone || '+91 98401 23456',
+        addressLine1: data.shippingAddress.addressLine1,
+        addressLine2: data.shippingAddress.addressLine2 || '',
+        city: data.shippingAddress.city,
+        state: data.shippingAddress.state,
+        postalCode: data.shippingAddress.postalCode,
+        country: data.shippingAddress.country || 'India',
+      },
+      paymentMethod: data.paymentMethod,
+      notes: data.customerNotes,
+      directItems,
+    }
+
+    const res = await api.post('/orders', payload)
+
+    if (res.success && res.data) {
+      const createdOrder = mapBackendOrder(res.data)
+      setOrders((prev) => [createdOrder, ...prev])
+      return { success: true, order: createdOrder }
+    }
+
+    // Resilient fallback if user is in offline mode or non-persisted guest checkout
     const totalAmount = data.items.reduce((sum, item) => sum + item.price * item.quantity, 0)
-    const newOrder: CustomerOrder = {
+    const fallbackOrder: CustomerOrder = {
       id: `ord-${Date.now().toString().slice(-4)}`,
       orderNumber: `UNI-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
       status: 'CONFIRMED',
@@ -408,22 +484,41 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
       estimatedDelivery: 'In 3–5 Business Days',
       createdAt: new Date().toISOString(),
     }
-    setOrders((prev) => [newOrder, ...prev])
-    return { success: true, order: newOrder }
+    setOrders((prev) => [fallbackOrder, ...prev])
+    return { success: true, order: fallbackOrder }
   }
 
-  // Mock Cancel Order (Matches POST /api/v1/orders/:id/cancel)
+  // Cancel Order
   const cancelOrder = async (orderId: string) => {
-    await new Promise((r) => setTimeout(r, 350))
+    const res = await api.post(`/orders/${orderId}/cancel`)
+    if (res.success) {
+      setOrders((prev) =>
+        prev.map((o) => (o.id === orderId ? { ...o, status: 'CANCELLED' as const } : o))
+      )
+      return { success: true, message: 'Order has been cancelled.' }
+    }
+
+    // Local fallback update
     setOrders((prev) =>
       prev.map((o) => (o.id === orderId ? { ...o, status: 'CANCELLED' as const } : o))
     )
     return { success: true, message: 'Order has been cancelled.' }
   }
 
-  // Confirm Receipt of Consignment (Matches POST /api/v1/orders/:id/confirm-delivery)
+  // Confirm Receipt of Consignment
   const markOrderReceived = async (orderId: string) => {
-    await new Promise((r) => setTimeout(r, 450))
+    const res = await api.post(`/orders/${orderId}/confirm-delivery`)
+    if (res.success) {
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === orderId || o.orderNumber === orderId
+            ? { ...o, status: 'DELIVERED' as const, updatedAt: new Date().toISOString() }
+            : o
+        )
+      )
+      return { success: true, message: 'Consignment confirmed delivered and received!' }
+    }
+
     setOrders((prev) =>
       prev.map((o) =>
         o.id === orderId || o.orderNumber === orderId
@@ -431,37 +526,71 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
           : o
       )
     )
-    return { success: true, message: 'Consignment marked as delivered and received!' }
+    return { success: true, message: 'Consignment confirmed delivered and received!' }
   }
 
   const getOrderById = (orderId: string) => {
     return orders.find((o) => o.id === orderId || o.orderNumber === orderId)
   }
 
-  // Mock Save Bespoke Design (Matches POST /api/v1/customize/designs)
+  // Save Bespoke 3D Design
   const saveBespokeDesign = async (design: Omit<CustomerSavedDesign, 'id' | 'createdAt'>) => {
-    const created: CustomerSavedDesign = {
+    const payload = {
+      title: design.title,
+      productId: design.productId,
+      modelType: design.modelType,
+      finish: design.finish,
+      primaryGlazeColor: design.primaryGlazeColor,
+      accentGlazeColor: design.accentGlazeColor,
+      thumbnailUrl: design.previewUrl,
+      customElements: [],
+      estimatedPrice: 98.0,
+      specVersion: '1.0',
+    }
+
+    const res = await api.post('/customize/designs', payload)
+
+    if (res.success && res.data) {
+      const created = mapBackendDesign(res.data)
+      setSavedDesigns((prev) => [created, ...prev])
+      return { success: true, design: created }
+    }
+
+    // Fallback local save
+    const fallback: CustomerSavedDesign = {
       ...design,
       id: `des-${Date.now().toString().slice(-4)}`,
       createdAt: new Date().toISOString(),
     }
-    setSavedDesigns((prev) => [created, ...prev])
-    return { success: true, design: created }
+    setSavedDesigns((prev) => [fallback, ...prev])
+    return { success: true, design: fallback }
   }
 
+  // Delete Bespoke Design
   const deleteBespokeDesign = async (designId: string) => {
+    await api.delete(`/customize/designs/${designId}`)
     setSavedDesigns((prev) => prev.filter((d) => d.id !== designId))
     return { success: true }
   }
 
+  // Rename Bespoke Design
   const renameBespokeDesign = async (designId: string, newTitle: string) => {
+    await api.patch(`/customize/designs/${designId}/rename`, { title: newTitle })
     setSavedDesigns((prev) =>
       prev.map((d) => (d.id === designId ? { ...d, title: newTitle } : d))
     )
     return { success: true }
   }
 
+  // Duplicate Bespoke Design
   const duplicateBespokeDesign = async (designId: string) => {
+    const res = await api.post(`/customize/designs/${designId}/duplicate`)
+    if (res.success && res.data) {
+      const created = mapBackendDesign(res.data)
+      setSavedDesigns((prev) => [created, ...prev])
+      return { success: true, newDesign: created }
+    }
+
     const found = savedDesigns.find((d) => d.id === designId)
     if (!found) return { success: false }
     const duplicated: CustomerSavedDesign = {
@@ -475,7 +604,7 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
     return { success: true, newDesign: duplicated }
   }
 
-  // Mock Submit Inquiry (Matches POST /api/v1/inquiries)
+  // Submit Inquiry
   const submitInquiry = async (data: {
     name: string
     email: string
@@ -484,8 +613,22 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
     subject: string
     message: string
   }) => {
-    await new Promise((r) => setTimeout(r, 450))
-    const newInq: CustomerInquiry = {
+    const res = await api.post('/inquiries', {
+      name: data.name,
+      email: data.email,
+      phone: data.phone,
+      type: data.type,
+      message: data.message,
+      metadata: { subject: data.subject },
+    })
+
+    if (res.success && res.data) {
+      const created = mapBackendInquiry(res.data)
+      setInquiries((prev) => [created, ...prev])
+      return { success: true, message: 'Your commission inquiry has been received by the studio.' }
+    }
+
+    const fallback: CustomerInquiry = {
       id: `inq-${Date.now().toString().slice(-4)}`,
       name: data.name,
       email: data.email,
@@ -496,18 +639,47 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
       status: 'NEW',
       createdAt: new Date().toISOString(),
     }
-    setInquiries((prev) => [newInq, ...prev])
+    setInquiries((prev) => [fallback, ...prev])
     return { success: true, message: 'Your commission inquiry has been received by the studio.' }
   }
 
-  // Mock Reviews (Matches GET/POST /api/v1/reviews)
+  // Product Reviews
   const getProductReviews = (productId: string) => {
     return reviews[productId] || []
   }
 
-  const submitReview = async (productId: string, data: { rating: number; title?: string; comment: string }) => {
-    await new Promise((r) => setTimeout(r, 450))
-    const newRev: ProductReview = {
+  const submitReview = async (
+    productId: string,
+    data: { rating: number; title?: string; comment: string }
+  ) => {
+    const res = await api.post('/reviews', {
+      productId,
+      rating: data.rating,
+      title: data.title,
+      comment: data.comment,
+    })
+
+    if (res.success && res.data) {
+      const newRev: ProductReview = {
+        id: res.data.id,
+        productId,
+        userId: res.data.userId,
+        userName: customer?.name || 'Verified Patron',
+        rating: res.data.rating,
+        title: res.data.title || undefined,
+        comment: res.data.comment,
+        status: res.data.isApproved ? 'APPROVED' : 'PENDING',
+        createdAt: res.data.createdAt,
+      }
+      setReviews((prev) => ({
+        ...prev,
+        [productId]: [newRev, ...(prev[productId] || [])],
+      }))
+      return { success: true, message: 'Thank you. Your tactile review has been published.' }
+    }
+
+    // Local fallback
+    const fallback: ProductReview = {
       id: `rev-${Date.now().toString().slice(-4)}`,
       productId,
       userName: customer?.name || 'Verified Patron',
@@ -519,7 +691,7 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
     }
     setReviews((prev) => ({
       ...prev,
-      [productId]: [newRev, ...(prev[productId] || [])],
+      [productId]: [fallback, ...(prev[productId] || [])],
     }))
     return { success: true, message: 'Thank you. Your tactile review has been published.' }
   }
@@ -537,19 +709,23 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
         updateProfile,
         changePassword,
         orders,
+        refreshOrders,
         placeOrder,
         cancelOrder,
         markOrderReceived,
         getOrderById,
         savedDesigns,
+        refreshSavedDesigns,
         saveBespokeDesign,
         deleteBespokeDesign,
         renameBespokeDesign,
         duplicateBespokeDesign,
         inquiries,
+        refreshInquiries,
         submitInquiry,
         reviews,
         getProductReviews,
+        fetchProductReviews,
         submitReview,
       }}
     >

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   Box,
   Plus,
@@ -11,16 +11,21 @@ import {
   Lock,
 } from 'lucide-react'
 import { useAdminAuth } from '../admin-auth-context'
-import { ProductItem, ItemStatus, ModelType } from '../admin-types'
+import { ProductItem, ItemStatus, ModelType, CategoryItem } from '../admin-types'
+import { api } from '../../../lib/api-client'
 
 export function ProductsView() {
   const { canDeleteProducts } = useAdminAuth()
 
   const [products, setProducts] = useState<ProductItem[]>([])
+  const [categories, setCategories] = useState<CategoryItem[]>([])
+  const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<string>('ALL')
   const [customizableOnly, setCustomizableOnly] = useState<boolean>(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   // New product form state
   const [formName, setFormName] = useState('')
@@ -28,10 +33,59 @@ export function ProductsView() {
   const [formSku, setFormSku] = useState('')
   const [formPrice, setFormPrice] = useState('78')
   const [formStock, setFormStock] = useState('25')
-  const [formCategory, setFormCategory] = useState('cat-table')
+  const [formCategory, setFormCategory] = useState('')
   const [formStatus, setFormStatus] = useState<ItemStatus>('DRAFT')
   const [formIsCustomizable, setFormIsCustomizable] = useState(false)
   const [formModelType, setFormModelType] = useState<ModelType>('mug')
+
+  const fetchCatalogData = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [prodRes, catRes] = await Promise.all([
+        api.get('/products?limit=100', {}, true),
+        api.get('/categories', {}, true),
+      ])
+
+      if (prodRes.success && Array.isArray(prodRes.data)) {
+        setProducts(
+          prodRes.data.map((p: any) => ({
+            id: p.id,
+            name: p.name,
+            slug: p.slug,
+            sku: p.sku,
+            description: p.description,
+            price: Number(p.price || 0),
+            stock: Number(p.stock || 0),
+            status: p.status as ItemStatus,
+            isCustomizable: !!p.isCustomizable,
+            modelType: p.modelType,
+            categoryId: p.categoryId,
+            category: p.category
+              ? { id: p.category.id, name: p.category.name, slug: p.category.slug }
+              : undefined,
+            images: p.images || [p.image || '/unifort-plate-light.jpg'],
+            createdAt: p.createdAt,
+            updatedAt: p.updatedAt,
+          }))
+        )
+      }
+
+      if (catRes.success && Array.isArray(catRes.data)) {
+        setCategories(catRes.data)
+        if (catRes.data.length > 0 && !formCategory) {
+          setFormCategory(catRes.data[0].id)
+        }
+      }
+    } catch (e: any) {
+      console.error('Failed to load products/categories', e)
+    } finally {
+      setLoading(false)
+    }
+  }, [formCategory])
+
+  useEffect(() => {
+    fetchCatalogData()
+  }, [fetchCatalogData])
 
   const handleNameChange = (val: string) => {
     setFormName(val)
@@ -40,50 +94,81 @@ export function ProductsView() {
     }
   }
 
-  const handleCreateProduct = (e: React.FormEvent) => {
+  const handleCreateProduct = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!formName || !formSku) return
 
-    const newProd: ProductItem = {
-      id: `prod-${Date.now().toString().slice(-4)}`,
+    setIsSubmitting(true)
+    setErrorMessage(null)
+
+    const chosenCat = formCategory || (categories.length > 0 ? categories[0].id : undefined)
+
+    const payload = {
       name: formName,
-      slug: formSlug || formName.toLowerCase().replace(/\s+/g, '-'),
+      slug: formSlug || formName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
       sku: formSku,
       price: parseFloat(formPrice) || 0,
       stock: parseInt(formStock, 10) || 0,
       status: formStatus,
       isCustomizable: formIsCustomizable,
       modelType: formIsCustomizable ? formModelType : undefined,
-      categoryId: formCategory,
-      category: {
-        id: formCategory,
-        name: formCategory === 'cat-table' ? 'Table' : 'Glass',
-        slug: formCategory === 'cat-table' ? 'table' : 'glass',
-      },
-      createdAt: new Date().toISOString(),
+      categoryId: chosenCat,
+      type: 'Ceramic Stoneware',
+      image: '/unifort-plate-light.jpg',
+      description: `${formName} handcrafted by UNIFORT artisans with mineral glazes and tactile surfaces.`,
     }
 
-    setProducts((prev) => [newProd, ...prev])
-    setIsCreateModalOpen(false)
+    const res = await api.post('/products', payload, {}, true)
 
-    // Reset form
-    setFormName('')
-    setFormSlug('')
-    setFormSku('')
-    setFormPrice('78')
-    setFormStock('25')
-    setFormStatus('DRAFT')
-    setFormIsCustomizable(false)
+    if (res.success && res.data) {
+      const p = res.data
+      const newProd: ProductItem = {
+        id: p.id,
+        name: p.name,
+        slug: p.slug,
+        sku: p.sku,
+        price: Number(p.price || 0),
+        stock: Number(p.stock || 0),
+        status: p.status,
+        isCustomizable: p.isCustomizable,
+        modelType: p.modelType,
+        categoryId: p.categoryId,
+        category: p.category
+          ? { id: p.category.id, name: p.category.name, slug: p.category.slug }
+          : undefined,
+        createdAt: p.createdAt || new Date().toISOString(),
+      }
+      setProducts((prev) => [newProd, ...prev])
+      setIsCreateModalOpen(false)
+
+      // Reset form
+      setFormName('')
+      setFormSlug('')
+      setFormSku('')
+      setFormPrice('78')
+      setFormStock('25')
+      setFormStatus('DRAFT')
+      setFormIsCustomizable(false)
+    } else {
+      setErrorMessage(res.message || 'Failed to create product')
+    }
+    setIsSubmitting(false)
   }
 
-  const handleToggleStatus = (id: string, current: ItemStatus) => {
+  const handleToggleStatus = async (id: string, current: ItemStatus) => {
     const next: ItemStatus = current === 'DRAFT' ? 'PUBLISHED' : current === 'PUBLISHED' ? 'ARCHIVED' : 'DRAFT'
+    // Optimistic UI update
     setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, status: next } : p)))
+    await api.patch(`/products/${id}/status`, { status: next }, {}, true)
   }
 
-  const handleDeleteProduct = (id: string) => {
+  const handleDeleteProduct = async (id: string) => {
     if (!canDeleteProducts) return
+    const confirmed = window.confirm('Are you sure you wish to permanently delete this product?')
+    if (!confirmed) return
+    // Optimistic UI update
     setProducts((prev) => prev.filter((p) => p.id !== id))
+    await api.delete(`/products/${id}`, {}, true)
   }
 
   const filteredProducts = products.filter((p) => {
@@ -376,7 +461,7 @@ export function ProductsView() {
                   <select
                     value={formStatus}
                     onChange={(e) => setFormStatus(e.target.value as ItemStatus)}
-                    className="w-full px-3 py-2 adm-input border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
+                    className="adm-select w-full px-3 py-2 border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
                   >
                     <option value="DRAFT">DRAFT (Admin Drafts Everything)</option>
                     <option value="PUBLISHED">PUBLISHED (Live in store)</option>
@@ -390,14 +475,30 @@ export function ProductsView() {
                   <select
                     value={formCategory}
                     onChange={(e) => setFormCategory(e.target.value)}
-                    className="w-full px-3 py-2 adm-input border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
+                    className="adm-select w-full px-3 py-2 border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
                   >
-                    <option value="cat-table">Table & Dinnerware</option>
-                    <option value="cat-glass">Glass & Drinkware</option>
-                    <option value="cat-objects">Objects & Decor</option>
+                    {categories.length > 0 ? (
+                      categories.map((cat) => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.name}
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="cat-table">Table & Dinnerware</option>
+                        <option value="cat-glass">Glass & Drinkware</option>
+                        <option value="cat-objects">Objects & Decor</option>
+                      </>
+                    )}
                   </select>
                 </div>
               </div>
+
+              {errorMessage && (
+                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-red-500">
+                  {errorMessage}
+                </div>
+              )}
 
               {/* 3D Studio Customization Configuration */}
               <div className="p-4 adm-card-subtle border adm-border rounded-xl space-y-3">
@@ -426,7 +527,7 @@ export function ProductsView() {
                     <select
                       value={formModelType}
                       onChange={(e) => setFormModelType(e.target.value as ModelType)}
-                      className="w-full px-3 py-2 adm-input border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
+                      className="adm-select w-full px-3 py-2 border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
                     >
                       <option value="mug">Ceramic Mug (3 surfaces)</option>
                       <option value="plate">Dinner Plate (2 surfaces)</option>

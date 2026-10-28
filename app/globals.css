@@ -2596,11 +2596,94 @@ img {
 .admin-dashboard-root select option {
   background-color: var(--adm-card);
   color: var(--adm-text-primary);
+  padding: 8px 12px;
 }
 
 .admin-dashboard-root select option:checked {
-  background-color: #424a70;
-  color: #ffffff;
+  background-color: #424a70 !important;
+  color: #ffffff !important;
+}
+
+/* ==========================================================================
+   Artisanal Custom Dropdown & Select Styling
+   ========================================================================== */
+.adm-select,
+.admin-dashboard-root select:not(.raw-select) {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  background-color: var(--adm-input-bg);
+  border: 1px solid var(--adm-input-border);
+  color: var(--adm-input-text);
+  border-radius: 0.75rem;
+  padding-left: 0.875rem;
+  padding-right: 2.25rem !important;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  font-size: 0.75rem;
+  line-height: 1.25rem;
+  cursor: pointer;
+  background-repeat: no-repeat !important;
+  background-position: right 0.75rem center !important;
+  background-size: 14px 14px !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23424a70' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.admin-dashboard-root.dark .adm-select,
+.admin-dashboard-root.dark select:not(.raw-select) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23d1d5db' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
+}
+
+.adm-select:hover,
+.admin-dashboard-root select:not(.raw-select):hover {
+  border-color: rgba(66, 74, 112, 0.45);
+}
+
+.admin-dashboard-root.dark .adm-select:hover,
+.admin-dashboard-root.dark select:not(.raw-select):hover {
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.adm-select:focus,
+.admin-dashboard-root select:not(.raw-select):focus {
+  outline: none !important;
+  border-color: #424a70 !important;
+  box-shadow: 0 0 0 3px rgba(66, 74, 112, 0.16) !important;
+}
+
+.admin-dashboard-root.dark .adm-select:focus,
+.admin-dashboard-root.dark select:not(.raw-select):focus {
+  border-color: #818cf8 !important;
+  box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.22) !important;
+}
+
+/* Compact select variant for tables */
+.adm-select-sm,
+.admin-dashboard-root select.adm-select-sm {
+  padding-left: 0.625rem;
+  padding-right: 1.75rem !important;
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+  font-size: 0.6875rem;
+  background-position: right 0.5rem center !important;
+  background-size: 11px 11px !important;
+  border-radius: 0.5rem;
+}
+
+/* Custom dropdown popover container */
+.adm-dropdown-menu {
+  background-color: var(--adm-card);
+  border: 1px solid var(--adm-card-border);
+  box-shadow: 0 10px 25px -5px rgba(28, 32, 51, 0.12), 0 8px 10px -6px rgba(28, 32, 51, 0.08);
+  border-radius: 0.875rem;
+  backdrop-filter: blur(16px);
+  z-index: 50;
+  overflow: hidden;
+}
+
+.admin-dashboard-root.dark .adm-dropdown-menu {
+  box-shadow: 0 12px 30px -4px rgba(0, 0, 0, 0.5), 0 8px 12px -6px rgba(0, 0, 0, 0.4);
 }
 
 /* UNIFORT Admin Action Button Utilities */
@@ -2625,6 +2708,7 @@ img {
 .adm-btn-primary * {
   color: #ffffff !important;
 }
+
 
 
 

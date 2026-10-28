@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   Sparkles,
   Search,
@@ -11,12 +11,13 @@ import {
 } from 'lucide-react'
 import { useAdminAuth } from '../admin-auth-context'
 import { CustomDesignItem, CustomDesignStatus } from '../admin-types'
+import { api } from '../../../lib/api-client'
 
 export function BespokeStudioView() {
   const { canManageWorkshop } = useAdminAuth()
 
-  // State management ready for API data (clean empty state, no mock data)
   const [designs, setDesigns] = useState<CustomDesignItem[]>([])
+  const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<string>('ALL')
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedDesign, setSelectedDesign] = useState<CustomDesignItem | null>(null)
@@ -33,6 +34,53 @@ export function BespokeStudioView() {
     { id: 'COMPLETED', label: 'Completed' },
     { id: 'REJECTED', label: 'Rejected' },
   ]
+
+  const fetchDesigns = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await api.get('/customize/admin/designs', {}, true)
+      if (res.success && res.data) {
+        const rawList = Array.isArray(res.data) ? res.data : (res.data.data || res.data.designs || [])
+        const mapped: CustomDesignItem[] = rawList.map((d: any) => ({
+          id: d.id,
+          userId: d.userId,
+          user: d.user
+            ? {
+                name: `${d.user.firstName || ''} ${d.user.lastName || ''}`.trim() || d.user.email,
+                email: d.user.email,
+              }
+            : undefined,
+          productId: d.productId,
+          product: d.product
+            ? {
+                name: d.product.name,
+                slug: d.product.slug,
+                modelType: d.product.modelType,
+                price: Number(d.product.price || 0),
+              }
+            : undefined,
+          title: d.title,
+          status: d.status as CustomDesignStatus,
+          finish: d.finish || 'matte',
+          designState: d.designState,
+          snapshotUrl: d.thumbnailUrl,
+          productionNotes: d.productionNotes,
+          craftsmanNotes: d.craftsmanNotes,
+          createdAt: d.createdAt,
+          updatedAt: d.updatedAt,
+        }))
+        setDesigns(mapped)
+      }
+    } catch (e) {
+      console.error('Failed to load workshop designs', e)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchDesigns()
+  }, [fetchDesigns])
 
   const filteredDesigns = designs.filter((d) => {
     const matchesStatus = statusFilter === 'ALL' || d.status === statusFilter
@@ -51,7 +99,7 @@ export function BespokeStudioView() {
     setIsInspectModalOpen(true)
   }
 
-  const handleSaveWorkshopUpdate = (e: React.FormEvent) => {
+  const handleSaveWorkshopUpdate = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!selectedDesign) return
 
@@ -65,6 +113,16 @@ export function BespokeStudioView() {
     setDesigns((prev) => prev.map((d) => (d.id === selectedDesign.id ? updated : d)))
     setSelectedDesign(updated)
     setIsInspectModalOpen(false)
+
+    await api.patch(
+      `/customize/admin/designs/${selectedDesign.id}/status`,
+      {
+        status: statusUpdateInput,
+        craftsmanNotes: craftsmanNoteInput,
+      },
+      {},
+      true
+    )
   }
 
   return (
@@ -256,7 +314,7 @@ export function BespokeStudioView() {
                 <select
                   value={statusUpdateInput}
                   onChange={(e) => setStatusUpdateInput(e.target.value as CustomDesignStatus)}
-                  className="w-full px-3 py-2 adm-input border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
+                  className="adm-select w-full px-3 py-2 border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
                 >
                   <option value="SUBMITTED">SUBMITTED (Awaiting initial review)</option>
                   <option value="IN_REVIEW">IN_REVIEW (Verifying resolution & alignment)</option>

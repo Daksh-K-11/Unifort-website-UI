@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   Mail,
   Search,
@@ -9,11 +9,13 @@ import {
 } from 'lucide-react'
 import { useAdminAuth } from '../admin-auth-context'
 import { InquiryRecord, InquiryStatus } from '../admin-types'
+import { api } from '../../../lib/api-client'
 
 export function InquiriesView() {
   const { canManageInquiries } = useAdminAuth()
 
   const [inquiries, setInquiries] = useState<InquiryRecord[]>([])
+  const [loading, setLoading] = useState(true)
   const [typeFilter, setTypeFilter] = useState<string>('ALL')
   const [statusFilter, setStatusFilter] = useState<string>('ALL')
   const [searchQuery, setSearchQuery] = useState('')
@@ -21,13 +23,46 @@ export function InquiriesView() {
   const [statusInput, setStatusInput] = useState<InquiryStatus>('RESOLVED')
   const [notesInput, setNotesInput] = useState('')
 
+  const fetchInquiries = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await api.get('/inquiries', {}, true)
+      if (res.success && Array.isArray(res.data)) {
+        const mapped: InquiryRecord[] = res.data.map((inq: any) => ({
+          id: inq.id,
+          name: inq.name || (inq.user ? `${inq.user.firstName || ''} ${inq.user.lastName || ''}`.trim() : 'Patron'),
+          email: inq.email || inq.user?.email || '',
+          phone: inq.phone || inq.user?.phone || undefined,
+          type: inq.type,
+          subject: inq.metadata?.subject || inq.subject || 'Atelier Commission Inquiry',
+          message: inq.message,
+          status: inq.status,
+          notes: inq.notes,
+          metadata: inq.metadata,
+          userId: inq.userId,
+          createdAt: inq.createdAt,
+          updatedAt: inq.updatedAt,
+        }))
+        setInquiries(mapped)
+      }
+    } catch (e) {
+      console.error('Failed to load inquiries', e)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchInquiries()
+  }, [fetchInquiries])
+
   const handleOpenDetail = (inq: InquiryRecord) => {
     setSelectedInquiry(inq)
     setStatusInput(inq.status)
     setNotesInput(inq.notes || '')
   }
 
-  const handleSaveResolution = (e: React.FormEvent) => {
+  const handleSaveResolution = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!selectedInquiry) return
 
@@ -40,6 +75,16 @@ export function InquiriesView() {
 
     setInquiries((prev) => prev.map((i) => (i.id === selectedInquiry.id ? updated : i)))
     setSelectedInquiry(null)
+
+    await api.patch(
+      `/inquiries/${selectedInquiry.id}`,
+      {
+        status: statusInput,
+        notes: notesInput,
+      },
+      {},
+      true
+    )
   }
 
   const filteredInquiries = inquiries.filter((i) => {
@@ -210,7 +255,7 @@ export function InquiriesView() {
                 <select
                   value={statusInput}
                   onChange={(e) => setStatusInput(e.target.value as InquiryStatus)}
-                  className="w-full px-3 py-2 adm-input border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
+                  className="adm-select w-full px-3 py-2 border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
                 >
                   <option value="NEW">NEW</option>
                   <option value="IN_PROGRESS">IN_PROGRESS (Engaging with client)</option>

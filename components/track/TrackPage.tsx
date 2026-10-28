@@ -23,6 +23,7 @@ import {
 import { useCustomer } from '@/lib/customer-context'
 import { CustomerOrder, OrderStatus } from '@/lib/customer-types'
 import { UnifortButton } from '@/components/ui/UnifortButton'
+import { api } from '@/lib/api-client'
 
 export function TrackPage() {
   return (
@@ -72,7 +73,7 @@ function TrackContent() {
     }
   }, [searchParams, orders])
 
-  const performLookup = (searchRef: string) => {
+  const performLookup = async (searchRef: string) => {
     setNotFound(false)
     setDeliveryConfirmedSuccess(false)
     const clean = searchRef.trim().toUpperCase()
@@ -87,10 +88,55 @@ function TrackContent() {
 
     if (found) {
       setCurrentOrder(found)
-    } else {
-      setCurrentOrder(null)
-      setNotFound(true)
+      return
     }
+
+    // Query backend public tracking API
+    try {
+      const res = await api.get(`/orders/track/${encodeURIComponent(clean)}`)
+      if (res.success && res.data) {
+        const o = res.data
+        const rawAddr = o.shippingAddress || {}
+        const fetchedOrder: CustomerOrder = {
+          id: o.id,
+          orderNumber: o.orderNumber,
+          status: o.status,
+          paymentStatus: o.paymentStatus,
+          paymentMethod: o.paymentMethod,
+          totalAmount: Number(o.totalAmount || 0),
+          items: (o.items || []).map((it: any) => ({
+            id: it.id,
+            productId: it.productId,
+            productName: it.productName,
+            productType: it.productType,
+            productImage: it.productImage || '/unifort-plate-light.jpg',
+            price: Number(it.price || 0),
+            quantity: it.quantity,
+            bespokeDesignId: it.customDesignId,
+          })),
+          shippingAddress: {
+            fullName: rawAddr.recipientName || rawAddr.fullName || 'Patron',
+            addressLine1: rawAddr.addressLine1 || '',
+            addressLine2: rawAddr.addressLine2 || '',
+            city: rawAddr.city || '',
+            state: rawAddr.state || '',
+            postalCode: rawAddr.postalCode || '',
+            country: rawAddr.country || 'India',
+          },
+          trackingNumber: o.trackingNumber,
+          carrier: o.carrier,
+          estimatedDelivery: o.estimatedDelivery,
+          createdAt: o.createdAt,
+        }
+        setCurrentOrder(fetchedOrder)
+        return
+      }
+    } catch (e) {
+      console.error('Error fetching tracking info', e)
+    }
+
+    setCurrentOrder(null)
+    setNotFound(true)
   }
 
   const handleSearchSubmit = (e: React.FormEvent) => {

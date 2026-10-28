@@ -215,9 +215,12 @@ export interface ReviewRecord {
 export interface AuditLogRecord {
   id: string
   action: string
-  details?: string
+  resource?: string
+  details?: string | Record<string, any>
   ipAddress?: string
   userId?: string
+  userEmail?: string
+  userRole?: string
   user?: {
     name: string
     email: string

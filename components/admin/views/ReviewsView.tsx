@@ -1,25 +1,76 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   MessageSquareQuote,
   Star,
   CheckCircle2,
   XCircle,
   Search,
+  Edit3,
+  X,
 } from 'lucide-react'
 import { useAdminAuth } from '../admin-auth-context'
 import { ReviewRecord, ReviewStatus } from '../admin-types'
+import { api } from '../../../lib/api-client'
 
 export function ReviewsView() {
   const { canModerateReviews } = useAdminAuth()
 
   const [reviews, setReviews] = useState<ReviewRecord[]>([])
+  const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<string>('ALL')
   const [searchQuery, setSearchQuery] = useState('')
+  const [modifyingReviewId, setModifyingReviewId] = useState<string | null>(null)
 
-  const handleModerate = (id: string, newStatus: ReviewStatus) => {
+  const fetchReviews = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await api.get('/reviews/admin/all', {}, true)
+      if (res.success && Array.isArray(res.data)) {
+        const mapped: ReviewRecord[] = res.data.map((r: any) => ({
+          id: r.id,
+          productId: r.productId,
+          product: r.product
+            ? {
+                name: r.product.name,
+                slug: r.product.slug,
+              }
+            : undefined,
+          userId: r.userId,
+          user: r.user
+            ? {
+                name: `${r.user.firstName || ''} ${r.user.lastName || ''}`.trim() || r.user.email,
+                email: r.user.email,
+              }
+            : undefined,
+          rating: r.rating,
+          title: r.title,
+          comment: r.comment,
+          status: r.isApproved ? ('APPROVED' as ReviewStatus) : ('PENDING' as ReviewStatus),
+          createdAt: r.createdAt,
+        }))
+        setReviews(mapped)
+      }
+    } catch (e) {
+      console.error('Failed to load reviews', e)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchReviews()
+  }, [fetchReviews])
+
+  const handleModerate = async (id: string, newStatus: ReviewStatus) => {
     setReviews((prev) => prev.map((r) => (r.id === id ? { ...r, status: newStatus } : r)))
+    await api.patch(
+      `/reviews/${id}/moderate`,
+      { isApproved: newStatus === 'APPROVED' },
+      {},
+      true
+    )
   }
 
   const filteredReviews = reviews.filter((r) => {
@@ -133,24 +184,77 @@ export function ReviewsView() {
                     </span>
                   </td>
                   <td className="py-3.5 px-4 text-right">
-                    <div className="flex items-center justify-end gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => handleModerate(rev.id, 'APPROVED')}
-                        className="px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 text-xs font-medium inline-flex items-center gap-1"
-                      >
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>Approve</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleModerate(rev.id, 'REJECTED')}
-                        className="px-2.5 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/20 text-xs font-medium inline-flex items-center gap-1"
-                      >
-                        <XCircle className="w-3.5 h-3.5" />
-                        <span>Reject</span>
-                      </button>
-                    </div>
+                    {/* If status is PENDING, keep direct Approve and Reject buttons */}
+                    {rev.status === 'PENDING' ? (
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleModerate(rev.id, 'APPROVED')}
+                          className="px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 text-xs font-medium inline-flex items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Approve</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleModerate(rev.id, 'REJECTED')}
+                          className="px-2.5 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/20 text-xs font-medium inline-flex items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          <XCircle className="w-3.5 h-3.5" />
+                          <span>Reject</span>
+                        </button>
+                      </div>
+                    ) : modifyingReviewId === rev.id ? (
+                      /* When modifying already completed review, allow switching decision */
+                      <div className="flex items-center justify-end gap-1.5 animate-in fade-in duration-150">
+                        {rev.status !== 'APPROVED' && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              await handleModerate(rev.id, 'APPROVED')
+                              setModifyingReviewId(null)
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 text-xs font-medium inline-flex items-center gap-1 cursor-pointer transition-colors"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Approve</span>
+                          </button>
+                        )}
+                        {rev.status !== 'REJECTED' && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              await handleModerate(rev.id, 'REJECTED')
+                              setModifyingReviewId(null)
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/20 text-xs font-medium inline-flex items-center gap-1 cursor-pointer transition-colors"
+                          >
+                            <XCircle className="w-3.5 h-3.5" />
+                            <span>Reject</span>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setModifyingReviewId(null)}
+                          className="p-1 rounded-lg adm-text-muted hover:adm-text-primary hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
+                          title="Cancel"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      /* If already approved or rejected, show Modify button */
+                      <div className="flex items-center justify-end">
+                        <button
+                          type="button"
+                          onClick={() => setModifyingReviewId(rev.id)}
+                          className="px-2.5 py-1 rounded-lg border adm-border hover:bg-black/5 dark:hover:bg-white/5 text-xs font-medium adm-text-secondary hover:adm-text-primary inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+                        >
+                          <Edit3 className="w-3 h-3 text-[#424a70] dark:text-indigo-400" />
+                          <span>Modify</span>
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -161,3 +265,4 @@ export function ReviewsView() {
     </div>
   )
 }
+

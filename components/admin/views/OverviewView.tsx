@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   TrendingUp,
   ShoppingBag,
@@ -14,19 +14,70 @@ import {
 } from 'lucide-react'
 import { useAdminAuth } from '../admin-auth-context'
 import { AdminSection } from '../admin-types'
+import { api } from '../../../lib/api-client'
 
 interface OverviewViewProps {
   onNavigate: (section: AdminSection) => void
 }
 
 export function OverviewView({ onNavigate }: OverviewViewProps) {
-  const { role } = useAdminAuth()
+  const { role, isAdmin } = useAdminAuth()
 
-  // Real backend KPIs initialized cleanly (no mock data as requested)
+  const [revenue, setRevenue] = useState<string>('₹0.00')
+  const [totalOrders, setTotalOrders] = useState<number>(0)
+  const [bespokeActive, setBespokeActive] = useState<number>(0)
+  const [customerAccounts, setCustomerAccounts] = useState<number>(0)
+  const [lowStockCount, setLowStockCount] = useState<number>(0)
+
+  const fetchStats = useCallback(async () => {
+    try {
+      if (isAdmin) {
+        const res = await api.get('/admin/dashboard-stats', {}, true)
+        if (res.success && res.data) {
+          const d = res.data
+          setRevenue(`₹${(d.revenue?.totalPaid || 0).toLocaleString('en-IN')}`)
+          setTotalOrders(d.orders?.total || 0)
+          setCustomerAccounts(d.users?.customers || 0)
+          setLowStockCount(Array.isArray(d.catalog?.lowStockItems) ? d.catalog.lowStockItems.length : 0)
+        }
+      } else {
+        // Staff role: fetch order and product stats
+        const [ordRes, prodRes] = await Promise.all([
+          api.get('/orders/admin/all', {}, true),
+          api.get('/products?limit=100', {}, true),
+        ])
+        if (ordRes.success && Array.isArray(ordRes.data)) {
+          const paidOrders = ordRes.data.filter((o: any) => o.paymentStatus === 'PAID')
+          const totalPaid = paidOrders.reduce((sum: number, o: any) => sum + Number(o.totalAmount || 0), 0)
+          setRevenue(`₹${totalPaid.toLocaleString('en-IN')}`)
+          setTotalOrders(ordRes.data.length)
+        }
+        if (prodRes.success && Array.isArray(prodRes.data)) {
+          const lowStock = prodRes.data.filter((p: any) => Number(p.stock) <= 10)
+          setLowStockCount(lowStock.length)
+        }
+      }
+
+      // Fetch active bespoke pieces
+      const bespokeRes = await api.get('/customize/admin/designs', {}, true)
+      if (bespokeRes.success && bespokeRes.data) {
+        const rawList = Array.isArray(bespokeRes.data) ? bespokeRes.data : (bespokeRes.data.data || bespokeRes.data.designs || [])
+        const inProd = rawList.filter((d: any) => d.status === 'IN_PRODUCTION' || d.status === 'SUBMITTED')
+        setBespokeActive(inProd.length)
+      }
+    } catch (e) {
+      console.error('Failed to load dashboard metrics', e)
+    }
+  }, [isAdmin])
+
+  useEffect(() => {
+    fetchStats()
+  }, [fetchStats])
+
   const stats = [
     {
       title: 'Gross Revenue',
-      value: '₹0.00',
+      value: revenue,
       caption: 'Direct from live orders',
       icon: TrendingUp,
       color: 'text-emerald-500 dark:text-emerald-400',
@@ -35,7 +86,7 @@ export function OverviewView({ onNavigate }: OverviewViewProps) {
     },
     {
       title: 'Total Placed Orders',
-      value: '0',
+      value: totalOrders.toString(),
       caption: 'Awaiting fulfillment',
       icon: ShoppingBag,
       color: 'text-blue-500 dark:text-blue-400',
@@ -45,7 +96,7 @@ export function OverviewView({ onNavigate }: OverviewViewProps) {
     },
     {
       title: 'Bespoke In Production',
-      value: '0',
+      value: bespokeActive.toString(),
       caption: 'Active kiln & studio queue',
       icon: Sparkles,
       color: 'text-purple-500 dark:text-purple-400',
@@ -55,7 +106,7 @@ export function OverviewView({ onNavigate }: OverviewViewProps) {
     },
     {
       title: 'Customer Accounts',
-      value: '0',
+      value: customerAccounts.toString(),
       caption: 'Registered patron profiles',
       icon: Users,
       color: 'text-teal-500 dark:text-teal-400',
@@ -65,8 +116,8 @@ export function OverviewView({ onNavigate }: OverviewViewProps) {
     },
     {
       title: 'Low Stock Alerts',
-      value: '0',
-      caption: 'Threshold < 5 units',
+      value: lowStockCount.toString(),
+      caption: 'Threshold ≤ 10 units',
       icon: AlertTriangle,
       color: 'text-amber-500 dark:text-amber-400',
       bg: 'bg-amber-500/10',

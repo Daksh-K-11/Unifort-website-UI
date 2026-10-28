@@ -157,7 +157,13 @@ export function CheckoutPage() {
 
     const orderItems = items.map((item, idx) => ({
       id: `it-${Date.now()}-${idx}`,
-      productId: item.product.name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+      productId:
+        (item.product as any).id ||
+        (item.product as any).slug ||
+        item.product.name
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/(^-|-$)/g, ''),
       productName: item.product.name,
       productType: item.product.type,
       productImage: item.product.image,

@@ -1,19 +1,39 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { FolderTree, Plus, Search, Trash2, X, Lock } from 'lucide-react'
 import { useAdminAuth } from '../admin-auth-context'
 import { CategoryItem } from '../admin-types'
+import { api } from '../../../lib/api-client'
 
 export function CategoriesView() {
   const { isAdmin } = useAdminAuth()
 
   const [categories, setCategories] = useState<CategoryItem[]>([])
+  const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [name, setName] = useState('')
   const [slug, setSlug] = useState('')
   const [description, setDescription] = useState('')
+
+  const fetchCategories = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await api.get('/categories')
+      if (res.success && Array.isArray(res.data)) {
+        setCategories(res.data)
+      }
+    } catch (e) {
+      console.error('Failed to load categories', e)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchCategories()
+  }, [fetchCategories])
 
   const handleNameChange = (val: string) => {
     setName(val)
@@ -22,29 +42,32 @@ export function CategoriesView() {
     }
   }
 
-  const handleCreateCategory = (e: React.FormEvent) => {
+  const handleCreateCategory = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!name) return
 
-    const newCat: CategoryItem = {
-      id: `cat-${Date.now().toString().slice(-4)}`,
+    const payload = {
       name,
-      slug: slug || name.toLowerCase().replace(/\s+/g, '-'),
+      slug: slug || name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
       description,
-      _count: { products: 0 },
-      createdAt: new Date().toISOString(),
     }
 
-    setCategories((prev) => [newCat, ...prev])
-    setIsCreateModalOpen(false)
-    setName('')
-    setSlug('')
-    setDescription('')
+    const res = await api.post('/categories', payload, {}, true)
+    if (res.success && res.data) {
+      setCategories((prev) => [res.data, ...prev])
+      setIsCreateModalOpen(false)
+      setName('')
+      setSlug('')
+      setDescription('')
+    }
   }
 
-  const handleDeleteCategory = (id: string) => {
+  const handleDeleteCategory = async (id: string) => {
     if (!isAdmin) return
+    const confirmed = window.confirm('Are you sure you wish to delete this category?')
+    if (!confirmed) return
     setCategories((prev) => prev.filter((c) => c.id !== id))
+    await api.delete(`/categories/${id}`, {}, true)
   }
 
   const filteredCategories = categories.filter(

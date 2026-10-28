@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   Users,
   Search,
@@ -8,23 +8,63 @@ import {
   Lock,
   UserPlus,
   X,
+  AlertTriangle,
+  Loader2,
+  ShieldAlert,
 } from 'lucide-react'
 import { useAdminAuth } from '../admin-auth-context'
 import { AdminUser, UserRole } from '../admin-types'
+import { api } from '../../../lib/api-client'
 
 export function UsersView() {
-  const { canManageUsers } = useAdminAuth()
+  const { canManageUsers, currentUser } = useAdminAuth()
 
   const [users, setUsers] = useState<AdminUser[]>([])
+  const [loading, setLoading] = useState(true)
   const [roleFilter, setRoleFilter] = useState<string>('ALL')
   const [searchQuery, setSearchQuery] = useState('')
   const [isProvisionModalOpen, setIsProvisionModalOpen] = useState(false)
+
+  // User Deletion Confirmation Modal
+  const [userToDelete, setUserToDelete] = useState<AdminUser | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   // Provision form
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [role, setRole] = useState<UserRole>('STAFF')
+
+  const fetchUsers = useCallback(async () => {
+    if (!canManageUsers) return
+    setLoading(true)
+    try {
+      const res = await api.get('/admin/users', {}, true)
+      if (res.success && res.data) {
+        const raw = Array.isArray(res.data) ? res.data : (res.data.users || [])
+        const mapped: AdminUser[] = raw.map((u: any) => ({
+          id: u.id,
+          name: `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email,
+          email: u.email,
+          role: u.role as UserRole,
+          isActive: u.isActive !== false,
+          phone: u.phone,
+          createdAt: u.createdAt,
+          updatedAt: u.updatedAt,
+        }))
+        setUsers(mapped)
+      }
+    } catch (e) {
+      console.error('Failed to load admin users', e)
+    } finally {
+      setLoading(false)
+    }
+  }, [canManageUsers])
+
+  useEffect(() => {
+    fetchUsers()
+  }, [fetchUsers])
 
   if (!canManageUsers) {
     return (
@@ -40,37 +80,69 @@ export function UsersView() {
     )
   }
 
-  const handleProvisionUser = (e: React.FormEvent) => {
+  const handleProvisionUser = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!name || !email || !password) return
 
-    const newUser: AdminUser = {
-      id: `usr-${Date.now().toString().slice(-4)}`,
-      name,
-      email,
+    const parts = name.trim().split(' ')
+    const firstName = parts[0] || 'Atelier'
+    const lastName = parts.slice(1).join(' ') || 'Staff'
+
+    const payload = {
+      firstName,
+      lastName,
+      email: email.trim().toLowerCase(),
+      password,
       role,
-      isActive: true,
-      createdAt: new Date().toISOString(),
     }
 
-    setUsers((prev) => [newUser, ...prev])
-    setIsProvisionModalOpen(false)
-    setName('')
-    setEmail('')
-    setPassword('')
-    setRole('STAFF')
+    const res = await api.post('/admin/users', payload, {}, true)
+    if (res.success && res.data) {
+      const u = res.data
+      const newUser: AdminUser = {
+        id: u.id,
+        name: `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email,
+        email: u.email,
+        role: u.role as UserRole,
+        isActive: u.isActive !== false,
+        createdAt: u.createdAt || new Date().toISOString(),
+      }
+      setUsers((prev) => [newUser, ...prev])
+      setIsProvisionModalOpen(false)
+      setName('')
+      setEmail('')
+      setPassword('')
+      setRole('STAFF')
+    }
   }
 
-  const handleToggleActive = (id: string, current: boolean) => {
+  const handleToggleActive = async (id: string, current: boolean) => {
     setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, isActive: !current } : u)))
+    await api.patch(`/admin/users/${id}/status`, { isActive: !current }, {}, true)
   }
 
-  const handleChangeRole = (id: string, newRole: UserRole) => {
+  const handleChangeRole = async (id: string, newRole: UserRole) => {
     setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, role: newRole } : u)))
+    await api.patch(`/admin/users/${id}/role`, { role: newRole }, {}, true)
   }
 
-  const handleDeleteUser = (id: string) => {
-    setUsers((prev) => prev.filter((u) => u.id !== id))
+  const handleConfirmDelete = async () => {
+    if (!userToDelete) return
+    setIsDeleting(true)
+    setDeleteError(null)
+    try {
+      const res = await api.delete(`/admin/users/${userToDelete.id}`, {}, true)
+      if (res.success) {
+        setUsers((prev) => prev.filter((u) => u.id !== userToDelete.id))
+        setUserToDelete(null)
+      } else {
+        setDeleteError(res.message || 'Failed to remove user account.')
+      }
+    } catch (e: any) {
+      setDeleteError(e?.message || 'Network error encountered while removing user.')
+    } finally {
+      setIsDeleting(false)
+    }
   }
 
   const filteredUsers = users.filter((u) => {
@@ -168,54 +240,163 @@ export function UsersView() {
               </tr>
             </thead>
             <tbody className="divide-y adm-border text-xs adm-text-secondary">
-              {filteredUsers.map((user) => (
-                <tr key={user.id} className="adm-table-hover transition-colors">
-                  <td className="py-3.5 px-4 font-medium adm-text-primary">{user.name}</td>
-                  <td className="py-3.5 px-4 font-mono adm-text-muted">{user.email}</td>
-                  <td className="py-3.5 px-4">
-                    <select
-                      value={user.role}
-                      onChange={(e) => handleChangeRole(user.id, e.target.value as UserRole)}
-                      className={`px-2 py-1 rounded-lg text-[10px] font-mono font-medium border adm-input focus:outline-none ${
-                        user.role === 'ADMIN'
-                          ? 'border-purple-500/30 text-purple-700 dark:text-purple-300'
-                          : user.role === 'STAFF'
-                          ? 'border-teal-500/30 text-teal-700 dark:text-teal-300'
-                          : 'adm-border adm-text-muted'
-                      }`}
-                    >
-                      <option value="ADMIN">ADMIN</option>
-                      <option value="STAFF">STAFF</option>
-                      <option value="CUSTOMER">CUSTOMER</option>
-                    </select>
-                  </td>
-                  <td className="py-3.5 px-4">
-                    <button
-                      type="button"
-                      onClick={() => handleToggleActive(user.id, user.isActive)}
-                      className={`inline-flex items-center text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full font-medium border cursor-pointer ${
-                        user.isActive
-                          ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
-                          : 'bg-red-500/15 border-red-500/30 text-red-600 dark:text-red-300'
-                      }`}
-                    >
-                      {user.isActive ? 'Active' : 'Suspended'}
-                    </button>
-                  </td>
-                  <td className="py-3.5 px-4 text-right">
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteUser(user.id)}
-                      className="p-1.5 rounded-lg text-red-500 dark:text-red-400 hover:bg-red-500/10 transition-colors"
-                      title="Permanently Delete User"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {filteredUsers.map((user) => {
+                const isSelf =
+                  (currentUser?.id && currentUser.id === user.id) ||
+                  (currentUser?.email && currentUser.email.toLowerCase() === user.email.toLowerCase())
+
+                return (
+                  <tr key={user.id} className="adm-table-hover transition-colors">
+                    <td className="py-3.5 px-4 font-medium adm-text-primary">{user.name}</td>
+                    <td className="py-3.5 px-4 font-mono adm-text-muted">{user.email}</td>
+                    <td className="py-3.5 px-4">
+                      <select
+                        value={user.role}
+                        onChange={(e) => handleChangeRole(user.id, e.target.value as UserRole)}
+                        className={`adm-select adm-select-sm font-mono font-medium border focus:outline-none ${
+                          user.role === 'ADMIN'
+                            ? 'border-purple-500/30 text-purple-700 dark:text-purple-300'
+                            : user.role === 'STAFF'
+                            ? 'border-teal-500/30 text-teal-700 dark:text-teal-300'
+                            : 'adm-border adm-text-muted'
+                        }`}
+                      >
+                        <option value="ADMIN">ADMIN</option>
+                        <option value="STAFF">STAFF</option>
+                        <option value="CUSTOMER">CUSTOMER</option>
+                      </select>
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleActive(user.id, user.isActive)}
+                        className={`inline-flex items-center text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full font-medium border cursor-pointer ${
+                          user.isActive
+                            ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
+                            : 'bg-red-500/15 border-red-500/30 text-red-600 dark:text-red-300'
+                        }`}
+                      >
+                        {user.isActive ? 'Active' : 'Suspended'}
+                      </button>
+                    </td>
+                    <td className="py-3.5 px-4 text-right">
+                      {isSelf ? (
+                        <span
+                          className="p-1.5 rounded-lg text-slate-300 dark:text-slate-600 cursor-not-allowed inline-flex items-center"
+                          title="Active admin session (cannot remove self)"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 opacity-30" />
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setUserToDelete(user)
+                            setDeleteError(null)
+                          }}
+                          className="p-1.5 rounded-lg text-red-500 hover:text-red-700 dark:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
+                          title={`Permanently Delete ${user.name}`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {userToDelete && (
+        <div className="fixed inset-0 adm-modal-overlay backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-md adm-modal-bg border adm-border rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-5 border-b adm-border flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-600 dark:text-red-400">
+                  <ShieldAlert className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase tracking-wider text-red-600 dark:text-red-400 font-semibold">
+                    Revocation & Purge
+                  </span>
+                  <h3 className="text-base font-serif font-medium adm-text-primary">
+                    Remove User Account
+                  </h3>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isDeleting) {
+                    setUserToDelete(null)
+                    setDeleteError(null)
+                  }
+                }}
+                disabled={isDeleting}
+                className="p-1.5 rounded-lg adm-text-muted hover:adm-text-primary disabled:opacity-40"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <p className="text-xs adm-text-secondary leading-relaxed">
+                Are you sure you want to permanently revoke and delete access for this user account? This operation is immediate and irreversible.
+              </p>
+
+              <div className="p-3.5 rounded-xl adm-card-subtle border adm-border-subtle space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium adm-text-primary">{userToDelete.name}</span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full font-medium bg-purple-500/10 text-purple-700 dark:text-purple-300 border border-purple-500/20">
+                    {userToDelete.role}
+                  </span>
+                </div>
+                <div className="text-[11px] font-mono adm-text-muted">{userToDelete.email}</div>
+              </div>
+
+              {deleteError && (
+                <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-700 dark:text-red-300 text-xs flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-red-500" />
+                  <span>{deleteError}</span>
+                </div>
+              )}
+
+              <div className="pt-2 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUserToDelete(null)
+                    setDeleteError(null)
+                  }}
+                  disabled={isDeleting}
+                  className="px-4 py-2 rounded-xl text-xs adm-text-muted hover:adm-text-primary border adm-border hover:bg-black/5 dark:hover:bg-white/5 transition-colors disabled:opacity-50 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmDelete}
+                  disabled={isDeleting}
+                  className="px-4 py-2 rounded-xl text-xs font-medium bg-red-600 hover:bg-red-700 text-white shadow-md shadow-red-600/20 flex items-center gap-1.5 cursor-pointer disabled:opacity-60 transition-all"
+                >
+                  {isDeleting ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Deleting Account...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Delete User Account</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -291,7 +472,7 @@ export function UsersView() {
                 <select
                   value={role}
                   onChange={(e) => setRole(e.target.value as UserRole)}
-                  className="w-full px-3 py-2 adm-input border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
+                  className="adm-select w-full px-3 py-2 border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
                 >
                   <option value="STAFF">STAFF (Workshop, Inquiries & Fulfillment)</option>
                   <option value="ADMIN">ADMIN (Full Master Control & Auditing)</option>
@@ -322,3 +503,4 @@ export function UsersView() {
     </div>
   )
 }
+

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   ShoppingBag,
   Search,
@@ -12,11 +12,13 @@ import {
 } from 'lucide-react'
 import { useAdminAuth } from '../admin-auth-context'
 import { OrderRecord, OrderStatus, PaymentStatus } from '../admin-types'
+import { api } from '../../../lib/api-client'
 
 export function OrdersView() {
   const { canManageOrders } = useAdminAuth()
 
   const [orders, setOrders] = useState<OrderRecord[]>([])
+  const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<string>('ALL')
   const [paymentFilter, setPaymentFilter] = useState<string>('ALL')
   const [searchQuery, setSearchQuery] = useState('')
@@ -33,6 +35,70 @@ export function OrdersView() {
     { id: 'CANCELLED', label: 'Cancelled' },
   ]
 
+  const fetchOrders = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await api.get('/orders/admin/all', {}, true)
+      if (res.success && Array.isArray(res.data)) {
+        const mapped: OrderRecord[] = res.data.map((o: any) => ({
+          id: o.id,
+          orderNumber: o.orderNumber,
+          userId: o.userId,
+          user: o.user
+            ? {
+                name: `${o.user.firstName || ''} ${o.user.lastName || ''}`.trim() || o.customerName || 'Patron',
+                email: o.user.email || o.customerEmail || '',
+              }
+            : undefined,
+          status: o.status,
+          paymentStatus: o.paymentStatus,
+          totalAmount: Number(o.totalAmount || 0),
+          currency: o.currency || 'INR',
+          shippingAddress: {
+            fullName:
+              o.shippingAddress?.recipientName ||
+              o.shippingAddress?.fullName ||
+              o.customerName ||
+              'Patron Consignee',
+            addressLine1: o.shippingAddress?.addressLine1 || '',
+            city: o.shippingAddress?.city || '',
+            state: o.shippingAddress?.state || '',
+            postalCode: o.shippingAddress?.postalCode || '',
+            country: o.shippingAddress?.country || 'India',
+          },
+          customerNotes: o.notes || undefined,
+          createdAt: o.createdAt,
+          updatedAt: o.updatedAt,
+          items: (o.items || []).map((it: any) => ({
+            id: it.id,
+            productId: it.productId,
+            product: it.product
+              ? {
+                  name: it.productName || it.product.name,
+                  sku: it.product.sku,
+                  price: Number(it.price || it.product.price || 0),
+                }
+              : undefined,
+            quantity: it.quantity,
+            unitPrice: Number(it.price || 0),
+            customDesignId: it.customDesignId || undefined,
+            customSnapshotUrl: it.customSnapshotUrl || it.customDesign?.thumbnailUrl || undefined,
+            productionSpec: it.productionSpec,
+          })),
+        }))
+        setOrders(mapped)
+      }
+    } catch (e) {
+      console.error('Failed to fetch admin orders', e)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchOrders()
+  }, [fetchOrders])
+
   const filteredOrders = orders.filter((o) => {
     const matchesStatus = statusFilter === 'ALL' || o.status === statusFilter
     const matchesPayment = paymentFilter === 'ALL' || o.paymentStatus === paymentFilter
@@ -44,8 +110,7 @@ export function OrdersView() {
     return matchesStatus && matchesPayment && matchesSearch
   })
 
-
-  const handleUpdateStatus = (newStatus: OrderStatus) => {
+  const handleUpdateStatus = async (newStatus: OrderStatus) => {
     if (!selectedOrder) return
     const updated: OrderRecord = {
       ...selectedOrder,
@@ -54,9 +119,10 @@ export function OrdersView() {
     }
     setOrders((prev) => prev.map((o) => (o.id === selectedOrder.id ? updated : o)))
     setSelectedOrder(updated)
+    await api.patch(`/orders/${selectedOrder.id}/status`, { status: newStatus }, {}, true)
   }
 
-  const handleUpdatePayment = (newPayment: PaymentStatus) => {
+  const handleUpdatePayment = async (newPayment: PaymentStatus) => {
     if (!selectedOrder) return
     const updated: OrderRecord = {
       ...selectedOrder,
@@ -65,6 +131,7 @@ export function OrdersView() {
     }
     setOrders((prev) => prev.map((o) => (o.id === selectedOrder.id ? updated : o)))
     setSelectedOrder(updated)
+    await api.patch(`/orders/${selectedOrder.id}/payment`, { paymentStatus: newPayment }, {}, true)
   }
 
   return (
@@ -240,7 +307,7 @@ export function OrdersView() {
                   <select
                     value={selectedOrder.status}
                     onChange={(e) => handleUpdateStatus(e.target.value as OrderStatus)}
-                    className="w-full px-3 py-2 adm-input border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
+                    className="adm-select w-full px-3 py-2 border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
                   >
                     <option value="PENDING">PENDING</option>
                     <option value="CONFIRMED">CONFIRMED</option>
@@ -258,7 +325,7 @@ export function OrdersView() {
                   <select
                     value={selectedOrder.paymentStatus}
                     onChange={(e) => handleUpdatePayment(e.target.value as PaymentStatus)}
-                    className="w-full px-3 py-2 adm-input border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
+                    className="adm-select w-full px-3 py-2 border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
                   >
                     <option value="PENDING">PENDING</option>
                     <option value="PAID">PAID</option>
