@@ -10,6 +10,14 @@ import {
 import { useAdminAuth } from '../admin-auth-context'
 import { InquiryRecord, InquiryStatus } from '../admin-types'
 import { api } from '../../../lib/api-client'
+import { GlassDropdown, GlassDropdownOption } from '../../ui/GlassDropdown'
+
+const inquiryStatusOptions: GlassDropdownOption[] = [
+  { value: 'NEW', label: 'NEW', description: 'Fresh inquiry awaiting first response' },
+  { value: 'IN_PROGRESS', label: 'IN_PROGRESS (Engaging with client)', description: 'Correspondence underway' },
+  { value: 'RESOLVED', label: 'RESOLVED (Quote & contract agreed)', description: 'Commission or terms finalized' },
+  { value: 'CLOSED', label: 'CLOSED', description: 'Archived / completed' },
+]
 
 export function InquiriesView() {
   const { canManageInquiries } = useAdminAuth()
@@ -248,21 +256,12 @@ export function InquiriesView() {
                 </span>
               </div>
 
-              <div>
-                <label className="block text-[11px] uppercase tracking-wider adm-text-muted font-medium mb-1.5">
-                  Update Resolution Status
-                </label>
-                <select
-                  value={statusInput}
-                  onChange={(e) => setStatusInput(e.target.value as InquiryStatus)}
-                  className="adm-select w-full px-3 py-2 border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
-                >
-                  <option value="NEW">NEW</option>
-                  <option value="IN_PROGRESS">IN_PROGRESS (Engaging with client)</option>
-                  <option value="RESOLVED">RESOLVED (Quote & contract agreed)</option>
-                  <option value="CLOSED">CLOSED</option>
-                </select>
-              </div>
+              <GlassDropdown
+                label="Update Resolution Status"
+                options={inquiryStatusOptions}
+                value={statusInput}
+                onChange={(val) => setStatusInput(val as InquiryStatus)}
+              />
 
               <div>
                 <label className="block text-[11px] uppercase tracking-wider adm-text-muted font-medium mb-1.5">

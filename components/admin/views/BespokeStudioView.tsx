@@ -46,18 +46,18 @@ export function BespokeStudioView() {
           userId: d.userId,
           user: d.user
             ? {
-                name: `${d.user.firstName || ''} ${d.user.lastName || ''}`.trim() || d.user.email,
-                email: d.user.email,
-              }
+              name: `${d.user.firstName || ''} ${d.user.lastName || ''}`.trim() || d.user.email,
+              email: d.user.email,
+            }
             : undefined,
           productId: d.productId,
           product: d.product
             ? {
-                name: d.product.name,
-                slug: d.product.slug,
-                modelType: d.product.modelType,
-                price: Number(d.product.price || 0),
-              }
+              name: d.product.name,
+              slug: d.product.slug,
+              modelType: d.product.modelType,
+              price: Number(d.product.price || 0),
+            }
             : undefined,
           title: d.title,
           status: d.status as CustomDesignStatus,
@@ -150,11 +150,10 @@ export function BespokeStudioView() {
                 key={tab.id}
                 type="button"
                 onClick={() => setStatusFilter(tab.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
-                  isActive
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${isActive
                     ? 'tab-active bg-[#424a70] !text-white [&_*]:!text-white shadow-sm'
                     : 'adm-text-muted hover:adm-text-primary hover:bg-black/5 dark:hover:bg-white/5'
-                }`}
+                  }`}
               >
                 {tab.label}
               </button>
@@ -206,7 +205,7 @@ export function BespokeStudioView() {
                 <tr key={design.id} className="adm-table-hover transition-colors">
                   <td className="py-3.5 px-4 font-medium adm-text-primary">
                     <div className="flex items-center gap-2">
-                      <Sparkles className="w-3.5 h-3.5 text-purple-500 dark:text-purple-400 shrink-0" />
+
                       <span>{design.title}</span>
                     </div>
                   </td>
@@ -226,15 +225,14 @@ export function BespokeStudioView() {
                   </td>
                   <td className="py-3.5 px-4">
                     <span
-                      className={`inline-flex items-center gap-1 text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full font-medium border ${
-                        design.status === 'IN_PRODUCTION'
+                      className={`inline-flex items-center gap-1 text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full font-medium border ${design.status === 'IN_PRODUCTION'
                           ? 'bg-purple-500/15 border-purple-500/30 text-purple-700 dark:text-purple-300'
                           : design.status === 'APPROVED'
-                          ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
-                          : design.status === 'SUBMITTED'
-                          ? 'bg-blue-500/15 border-blue-500/30 text-blue-700 dark:text-blue-300'
-                          : 'bg-black/5 dark:bg-white/5 adm-border adm-text-muted'
-                      }`}
+                            ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
+                            : design.status === 'SUBMITTED'
+                              ? 'bg-blue-500/15 border-blue-500/30 text-blue-700 dark:text-blue-300'
+                              : 'bg-black/5 dark:bg-white/5 adm-border adm-text-muted'
+                        }`}
                     >
                       {design.status}
                     </span>

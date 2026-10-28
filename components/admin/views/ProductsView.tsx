@@ -1,18 +1,24 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Box,
   Plus,
   Search,
   Sparkles,
   Trash2,
+  Pencil,
   X,
   Lock,
+  Layers,
+  Save,
+  AlertTriangle,
+  Loader2,
 } from 'lucide-react'
 import { useAdminAuth } from '../admin-auth-context'
 import { ProductItem, ItemStatus, ModelType, CategoryItem } from '../admin-types'
 import { api } from '../../../lib/api-client'
+import { GlassDropdown, GlassDropdownOption } from '../../ui/GlassDropdown'
 
 export function ProductsView() {
   const { canDeleteProducts } = useAdminAuth()
@@ -37,6 +43,20 @@ export function ProductsView() {
   const [formStatus, setFormStatus] = useState<ItemStatus>('DRAFT')
   const [formIsCustomizable, setFormIsCustomizable] = useState(false)
   const [formModelType, setFormModelType] = useState<ModelType>('mug')
+
+  // Edit product form state
+  const [editingProduct, setEditingProduct] = useState<ProductItem | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editSlug, setEditSlug] = useState('')
+  const [editSku, setEditSku] = useState('')
+  const [editPrice, setEditPrice] = useState('78')
+  const [editStock, setEditStock] = useState('25')
+  const [editCategory, setEditCategory] = useState('')
+  const [editStatus, setEditStatus] = useState<ItemStatus>('DRAFT')
+  const [editIsCustomizable, setEditIsCustomizable] = useState(false)
+  const [editModelType, setEditModelType] = useState<ModelType>('mug')
+  const [editDescription, setEditDescription] = useState('')
+  const [editErrorMessage, setEditErrorMessage] = useState<string | null>(null)
 
   const fetchCatalogData = useCallback(async () => {
     setLoading(true)
@@ -101,18 +121,19 @@ export function ProductsView() {
     setIsSubmitting(true)
     setErrorMessage(null)
 
-    const chosenCat = formCategory || (categories.length > 0 ? categories[0].id : undefined)
+    const chosenCatObj = categories.find((c) => c.id === formCategory) || (categories.length > 0 ? categories[0] : undefined)
 
     const payload = {
-      name: formName,
+      name: formName.trim(),
       slug: formSlug || formName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
-      sku: formSku,
-      price: parseFloat(formPrice) || 0,
-      stock: parseInt(formStock, 10) || 0,
+      sku: formSku.trim(),
+      price: Math.max(1, parseFloat(formPrice) || 1),
+      stock: Math.max(0, parseInt(formStock, 10) || 0),
       status: formStatus,
       isCustomizable: formIsCustomizable,
       modelType: formIsCustomizable ? formModelType : undefined,
-      categoryId: chosenCat,
+      categoryId: chosenCatObj?.id,
+      categoryName: chosenCatObj?.name || 'Tableware',
       type: 'Ceramic Stoneware',
       image: '/unifort-plate-light.jpg',
       description: `${formName} handcrafted by UNIFORT artisans with mineral glazes and tactile surfaces.`,
@@ -127,6 +148,7 @@ export function ProductsView() {
         name: p.name,
         slug: p.slug,
         sku: p.sku,
+        description: p.description,
         price: Number(p.price || 0),
         stock: Number(p.stock || 0),
         status: p.status,
@@ -150,14 +172,94 @@ export function ProductsView() {
       setFormStatus('DRAFT')
       setFormIsCustomizable(false)
     } else {
-      setErrorMessage(res.message || 'Failed to create product')
+      const errMsg =
+        res.message ||
+        (Array.isArray((res as any).validationErrors)
+          ? (res as any).validationErrors.map((v: any) => `${v.field}: ${v.message}`).join(', ')
+          : 'Failed to create product')
+      setErrorMessage(errMsg)
+    }
+    setIsSubmitting(false)
+  }
+
+  const openEditModal = (p: ProductItem) => {
+    setEditingProduct(p)
+    setEditName(p.name)
+    setEditSlug(p.slug)
+    setEditSku(p.sku)
+    setEditPrice(String(p.price))
+    setEditStock(String(p.stock))
+    setEditStatus(p.status)
+    setEditCategory(p.categoryId || (categories.length > 0 ? categories[0].id : ''))
+    setEditIsCustomizable(p.isCustomizable)
+    setEditModelType((p.modelType as ModelType) || 'mug')
+    setEditDescription(p.description || '')
+    setEditErrorMessage(null)
+  }
+
+  const handleUpdateProduct = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingProduct || !editName || !editSku) return
+
+    setIsSubmitting(true)
+    setEditErrorMessage(null)
+
+    const chosenCatObj = categories.find((c) => c.id === editCategory)
+
+    const payload = {
+      name: editName.trim(),
+      slug: editSlug || editName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+      sku: editSku.trim(),
+      price: Math.max(1, parseFloat(editPrice) || 1),
+      stock: Math.max(0, parseInt(editStock, 10) || 0),
+      status: editStatus,
+      isCustomizable: editIsCustomizable,
+      modelType: editIsCustomizable ? editModelType : undefined,
+      categoryId: chosenCatObj?.id,
+      categoryName: chosenCatObj?.name,
+      description: editDescription,
+    }
+
+    const res = await api.put(`/products/${editingProduct.id}`, payload, {}, true)
+
+    if (res.success && res.data) {
+      const updated = res.data
+      setProducts((prev) =>
+        prev.map((item) =>
+          item.id === editingProduct.id
+            ? {
+                ...item,
+                name: updated.name,
+                slug: updated.slug,
+                sku: updated.sku,
+                price: Number(updated.price),
+                stock: Number(updated.stock),
+                status: updated.status,
+                isCustomizable: updated.isCustomizable,
+                modelType: updated.modelType,
+                categoryId: updated.categoryId,
+                category: updated.category
+                  ? { id: updated.category.id, name: updated.category.name, slug: updated.category.slug }
+                  : undefined,
+                description: updated.description,
+              }
+            : item
+        )
+      )
+      setEditingProduct(null)
+    } else {
+      const errMsg =
+        res.message ||
+        (Array.isArray((res as any).validationErrors)
+          ? (res as any).validationErrors.map((v: any) => `${v.field}: ${v.message}`).join(', ')
+          : 'Failed to update product details')
+      setEditErrorMessage(errMsg)
     }
     setIsSubmitting(false)
   }
 
   const handleToggleStatus = async (id: string, current: ItemStatus) => {
     const next: ItemStatus = current === 'DRAFT' ? 'PUBLISHED' : current === 'PUBLISHED' ? 'ARCHIVED' : 'DRAFT'
-    // Optimistic UI update
     setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, status: next } : p)))
     await api.patch(`/products/${id}/status`, { status: next }, {}, true)
   }
@@ -166,18 +268,49 @@ export function ProductsView() {
     if (!canDeleteProducts) return
     const confirmed = window.confirm('Are you sure you wish to permanently delete this product?')
     if (!confirmed) return
-    // Optimistic UI update
     setProducts((prev) => prev.filter((p) => p.id !== id))
     await api.delete(`/products/${id}`, {}, true)
   }
+
+  // Dropdown options
+  const categoryOptions: GlassDropdownOption[] = useMemo(() => {
+    if (categories.length > 0) {
+      return categories.map((cat) => ({
+        value: cat.id,
+        label: cat.name,
+      }))
+    }
+    return [
+      { value: 'cat-table', label: 'Table & Dinnerware' },
+      { value: 'cat-glass', label: 'Glass & Drinkware' },
+      { value: 'cat-objects', label: 'Objects & Decor' },
+    ]
+  }, [categories])
+
+  const statusOptions: GlassDropdownOption[] = [
+    { value: 'DRAFT', label: 'DRAFT (Admin Drafts Everything)', description: 'Hidden from public storefront' },
+    { value: 'PUBLISHED', label: 'PUBLISHED (Live in store)', description: 'Visible to patrons' },
+    { value: 'ARCHIVED', label: 'ARCHIVED', description: 'Decommissioned piece' },
+  ]
+
+  const modelTypeOptions: GlassDropdownOption[] = [
+    { value: 'mug', label: 'Ceramic Mug (3 surfaces)' },
+    { value: 'plate', label: 'Dinner Plate (2 surfaces)' },
+    { value: 'tumbler', label: 'Glass Tumbler (2 surfaces)' },
+    { value: 'bowl', label: 'Serving Bowl (2 surfaces)' },
+    { value: 'carafe', label: 'Studio Carafe (2 surfaces)' },
+    { value: 'tote', label: 'Linen Tote (2 surfaces)' },
+    { value: 'bottle', label: 'Travel Tumbler (2 surfaces)' },
+    { value: 'coaster', label: 'Ceramic Coaster Set (1 surface)' },
+  ]
 
   const filteredProducts = products.filter((p) => {
     const matchesStatus = statusFilter === 'ALL' || p.status === statusFilter
     const matchesCustom = !customizableOnly || p.isCustomizable
     const matchesSearch =
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.slug.toLowerCase().includes(searchQuery.toLowerCase())
+      (p.sku && p.sku.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (p.slug && p.slug.toLowerCase().includes(searchQuery.toLowerCase()))
     return matchesStatus && matchesCustom && matchesSearch
   })
 
@@ -196,7 +329,10 @@ export function ProductsView() {
 
         <button
           type="button"
-          onClick={() => setIsCreateModalOpen(true)}
+          onClick={() => {
+            setErrorMessage(null)
+            setIsCreateModalOpen(true)
+          }}
           className="px-4 py-2.5 adm-btn-primary rounded-xl text-xs flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
         >
           <Plus className="w-3.5 h-3.5" />
@@ -269,7 +405,10 @@ export function ProductsView() {
           <div className="mt-5">
             <button
               type="button"
-              onClick={() => setIsCreateModalOpen(true)}
+              onClick={() => {
+                setErrorMessage(null)
+                setIsCreateModalOpen(true)
+              }}
               className="px-4 py-2.5 adm-btn-primary rounded-xl text-xs flex items-center gap-1.5 cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
@@ -339,11 +478,19 @@ export function ProductsView() {
                   </td>
                   <td className="py-3.5 px-4 text-right">
                     <div className="flex items-center justify-end gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => openEditModal(prod)}
+                        className="p-1.5 rounded-lg text-[#424a70] dark:text-indigo-400 hover:bg-[#424a70]/10 dark:hover:bg-indigo-400/10 transition-colors cursor-pointer"
+                        title="Edit / Update Product Details"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
                       {canDeleteProducts ? (
                         <button
                           type="button"
                           onClick={() => handleDeleteProduct(prod.id)}
-                          className="p-1.5 rounded-lg text-red-500 dark:text-red-400 hover:bg-red-500/10 transition-colors"
+                          className="p-1.5 rounded-lg text-red-500 dark:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
                           title="Delete Product (Admin Only)"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -365,20 +512,25 @@ export function ProductsView() {
       {/* Create Product / Draft Modal */}
       {isCreateModalOpen && (
         <div className="fixed inset-0 adm-modal-overlay backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="w-full max-w-lg adm-modal-bg border rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+          <div className="w-full max-w-lg adm-modal-bg border rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-150">
             <div className="p-5 border-b adm-border flex items-center justify-between">
-              <div>
-                <span className="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400 font-semibold">
-                  Catalog Manager
-                </span>
-                <h3 className="text-base font-serif font-medium adm-text-primary">
-                  Create New Product or Draft
-                </h3>
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-600 dark:text-amber-400">
+                  <Plus className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400 font-semibold">
+                    Catalog Manager
+                  </span>
+                  <h3 className="text-base font-serif font-medium adm-text-primary">
+                    Create New Product or Draft
+                  </h3>
+                </div>
               </div>
               <button
                 type="button"
                 onClick={() => setIsCreateModalOpen(false)}
-                className="p-1.5 rounded-lg adm-text-muted hover:adm-text-primary"
+                className="p-1.5 rounded-lg adm-text-muted hover:adm-text-primary cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -438,6 +590,8 @@ export function ProductsView() {
                     onChange={(e) => setFormPrice(e.target.value)}
                     className="w-full px-3.5 py-2 adm-input border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
                     required
+                    min="1"
+                    step="0.01"
                   />
                 </div>
                 <div>
@@ -449,54 +603,33 @@ export function ProductsView() {
                     value={formStock}
                     onChange={(e) => setFormStock(e.target.value)}
                     className="w-full px-3.5 py-2 adm-input border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
+                    min="0"
                   />
                 </div>
               </div>
 
+              {/* Glassmorphic Dropdowns */}
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] uppercase tracking-wider adm-text-muted font-medium mb-1.5">
-                    Initial Lifecycle State
-                  </label>
-                  <select
-                    value={formStatus}
-                    onChange={(e) => setFormStatus(e.target.value as ItemStatus)}
-                    className="adm-select w-full px-3 py-2 border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
-                  >
-                    <option value="DRAFT">DRAFT (Admin Drafts Everything)</option>
-                    <option value="PUBLISHED">PUBLISHED (Live in store)</option>
-                    <option value="ARCHIVED">ARCHIVED</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[11px] uppercase tracking-wider adm-text-muted font-medium mb-1.5">
-                    Category
-                  </label>
-                  <select
-                    value={formCategory}
-                    onChange={(e) => setFormCategory(e.target.value)}
-                    className="adm-select w-full px-3 py-2 border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
-                  >
-                    {categories.length > 0 ? (
-                      categories.map((cat) => (
-                        <option key={cat.id} value={cat.id}>
-                          {cat.name}
-                        </option>
-                      ))
-                    ) : (
-                      <>
-                        <option value="cat-table">Table & Dinnerware</option>
-                        <option value="cat-glass">Glass & Drinkware</option>
-                        <option value="cat-objects">Objects & Decor</option>
-                      </>
-                    )}
-                  </select>
-                </div>
+                <GlassDropdown
+                  label="Initial Lifecycle State"
+                  options={statusOptions}
+                  value={formStatus}
+                  onChange={(val) => setFormStatus(val as ItemStatus)}
+                />
+
+                <GlassDropdown
+                  label="Category"
+                  options={categoryOptions}
+                  value={formCategory}
+                  onChange={(val) => setFormCategory(val)}
+                  placeholder="Select Category..."
+                />
               </div>
 
               {errorMessage && (
-                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-red-500">
-                  {errorMessage}
+                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-red-500 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-red-500" />
+                  <span>{errorMessage}</span>
                 </div>
               )}
 
@@ -515,30 +648,17 @@ export function ProductsView() {
                     type="checkbox"
                     checked={formIsCustomizable}
                     onChange={(e) => setFormIsCustomizable(e.target.checked)}
-                    className="w-4 h-4 rounded text-[#424a70] focus:ring-0 bg-transparent border-black/20 dark:border-white/20"
+                    className="w-4 h-4 rounded text-[#424a70] focus:ring-0 bg-transparent border-black/20 dark:border-white/20 cursor-pointer"
                   />
                 </div>
 
                 {formIsCustomizable && (
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-wider adm-text-muted font-medium mb-1">
-                      3D Silhouette Model Type
-                    </label>
-                    <select
-                      value={formModelType}
-                      onChange={(e) => setFormModelType(e.target.value as ModelType)}
-                      className="adm-select w-full px-3 py-2 border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
-                    >
-                      <option value="mug">Ceramic Mug (3 surfaces)</option>
-                      <option value="plate">Dinner Plate (2 surfaces)</option>
-                      <option value="tumbler">Glass Tumbler (2 surfaces)</option>
-                      <option value="bowl">Serving Bowl (2 surfaces)</option>
-                      <option value="carafe">Studio Carafe (2 surfaces)</option>
-                      <option value="tote">Linen Tote (2 surfaces)</option>
-                      <option value="bottle">Travel Tumbler (2 surfaces)</option>
-                      <option value="coaster">Ceramic Coaster Set (1 surface)</option>
-                    </select>
-                  </div>
+                  <GlassDropdown
+                    label="3D Silhouette Model Type"
+                    options={modelTypeOptions}
+                    value={formModelType}
+                    onChange={(val) => setFormModelType(val as ModelType)}
+                  />
                 )}
               </div>
 
@@ -546,16 +666,225 @@ export function ProductsView() {
                 <button
                   type="button"
                   onClick={() => setIsCreateModalOpen(false)}
-                  className="px-3.5 py-2 rounded-xl text-xs adm-text-muted hover:adm-text-primary"
+                  className="px-3.5 py-2 rounded-xl text-xs adm-text-muted hover:adm-text-primary cursor-pointer"
+                  disabled={isSubmitting}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2.5 adm-btn-primary rounded-xl text-xs flex items-center gap-1.5 cursor-pointer"
+                  disabled={isSubmitting}
+                  className="px-4 py-2.5 adm-btn-primary rounded-xl text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
                 >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Save to Catalog</span>
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Saving to Catalog...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Save to Catalog</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Product Modal */}
+      {editingProduct && (
+        <div className="fixed inset-0 adm-modal-overlay backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-lg adm-modal-bg border rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-5 border-b adm-border flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-[#424a70] dark:text-indigo-400">
+                  <Pencil className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase tracking-wider text-[#424a70] dark:text-indigo-400 font-semibold">
+                    Catalog Editor
+                  </span>
+                  <h3 className="text-base font-serif font-medium adm-text-primary">
+                    Update Product & Specs
+                  </h3>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingProduct(null)}
+                className="p-1.5 rounded-lg adm-text-muted hover:adm-text-primary cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateProduct} className="p-5 space-y-4 overflow-y-auto flex-1">
+              <div>
+                <label className="block text-[11px] uppercase tracking-wider adm-text-muted font-medium mb-1.5">
+                  Product Name *
+                </label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  placeholder="e.g. No. 22 Basalt Espresso Cup"
+                  className="w-full px-3.5 py-2 adm-input border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] uppercase tracking-wider adm-text-muted font-medium mb-1.5">
+                    SKU Code *
+                  </label>
+                  <input
+                    type="text"
+                    value={editSku}
+                    onChange={(e) => setEditSku(e.target.value)}
+                    placeholder="UNI-ESP-022"
+                    className="w-full px-3.5 py-2 adm-input border rounded-xl text-xs focus:outline-none focus:border-[#424a70] font-mono"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] uppercase tracking-wider adm-text-muted font-medium mb-1.5">
+                    URL Slug
+                  </label>
+                  <input
+                    type="text"
+                    value={editSlug}
+                    onChange={(e) => setEditSlug(e.target.value)}
+                    placeholder="basalt-espresso-cup"
+                    className="w-full px-3.5 py-2 adm-input border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] uppercase tracking-wider adm-text-muted font-medium mb-1.5">
+                    Base Price (₹) *
+                  </label>
+                  <input
+                    type="number"
+                    value={editPrice}
+                    onChange={(e) => setEditPrice(e.target.value)}
+                    className="w-full px-3.5 py-2 adm-input border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
+                    required
+                    min="1"
+                    step="0.01"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] uppercase tracking-wider adm-text-muted font-medium mb-1.5">
+                    Stock Count
+                  </label>
+                  <input
+                    type="number"
+                    value={editStock}
+                    onChange={(e) => setEditStock(e.target.value)}
+                    className="w-full px-3.5 py-2 adm-input border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
+                    min="0"
+                  />
+                </div>
+              </div>
+
+              {/* Glassmorphic Dropdowns */}
+              <div className="grid grid-cols-2 gap-3">
+                <GlassDropdown
+                  label="Lifecycle State"
+                  options={statusOptions}
+                  value={editStatus}
+                  onChange={(val) => setEditStatus(val as ItemStatus)}
+                />
+
+                <GlassDropdown
+                  label="Category"
+                  options={categoryOptions}
+                  value={editCategory}
+                  onChange={(val) => setEditCategory(val)}
+                  placeholder="Select Category..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] uppercase tracking-wider adm-text-muted font-medium mb-1.5">
+                  Artisanal Piece Description
+                </label>
+                <textarea
+                  rows={2}
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  placeholder="Description of the clay body, mineral glaze, and tactile profile..."
+                  className="w-full px-3.5 py-2 adm-input border rounded-xl text-xs focus:outline-none focus:border-[#424a70] resize-none"
+                />
+              </div>
+
+              {editErrorMessage && (
+                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-red-500 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-red-500" />
+                  <span>{editErrorMessage}</span>
+                </div>
+              )}
+
+              {/* 3D Studio Customization Configuration */}
+              <div className="p-4 adm-card-subtle border adm-border rounded-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-medium adm-text-primary block">
+                      Enable 3D Atelier Customization
+                    </span>
+                    <span className="text-[10px] adm-text-muted">
+                      Allows patrons to place custom glazes, decals, and patterns in the 3D studio.
+                    </span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={editIsCustomizable}
+                    onChange={(e) => setEditIsCustomizable(e.target.checked)}
+                    className="w-4 h-4 rounded text-[#424a70] focus:ring-0 bg-transparent border-black/20 dark:border-white/20 cursor-pointer"
+                  />
+                </div>
+
+                {editIsCustomizable && (
+                  <GlassDropdown
+                    label="3D Silhouette Model Type"
+                    options={modelTypeOptions}
+                    value={editModelType}
+                    onChange={(val) => setEditModelType(val as ModelType)}
+                  />
+                )}
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingProduct(null)}
+                  className="px-3.5 py-2 rounded-xl text-xs adm-text-muted hover:adm-text-primary cursor-pointer"
+                  disabled={isSubmitting}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-4 py-2.5 adm-btn-primary rounded-xl text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Saving Changes...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-3.5 h-3.5" />
+                      <span>Update Product</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

@@ -13,6 +13,23 @@ import {
 import { useAdminAuth } from '../admin-auth-context'
 import { OrderRecord, OrderStatus, PaymentStatus } from '../admin-types'
 import { api } from '../../../lib/api-client'
+import { GlassDropdown, GlassDropdownOption } from '../../ui/GlassDropdown'
+
+const fulfillmentOptions: GlassDropdownOption[] = [
+  { value: 'PENDING', label: 'PENDING', description: 'Order created, awaiting confirmation' },
+  { value: 'CONFIRMED', label: 'CONFIRMED', description: 'Verified and queued for workshop packing' },
+  { value: 'PROCESSING', label: 'PROCESSING', description: 'Ceramic selection and tactile inspection' },
+  { value: 'SHIPPED', label: 'SHIPPED', description: 'Dispatched via premium courier' },
+  { value: 'DELIVERED', label: 'DELIVERED', description: 'Safely delivered to patron residence' },
+  { value: 'CANCELLED', label: 'CANCELLED', description: 'Order cancelled' },
+]
+
+const paymentOptions: GlassDropdownOption[] = [
+  { value: 'PENDING', label: 'PENDING', description: 'Awaiting payment verification' },
+  { value: 'PAID', label: 'PAID', description: 'Funds successfully settled' },
+  { value: 'FAILED', label: 'FAILED', description: 'Transaction declined' },
+  { value: 'REFUNDED', label: 'REFUNDED', description: 'Funds reversed to original source' },
+]
 
 export function OrdersView() {
   const { canManageOrders } = useAdminAuth()
@@ -300,39 +317,19 @@ export function OrdersView() {
             <div className="p-5 space-y-5 overflow-y-auto flex-1">
               {/* Order Status Controls */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 adm-card-subtle border adm-border rounded-xl">
-                <div>
-                  <label className="block text-[10px] uppercase tracking-wider adm-text-muted font-medium mb-1.5">
-                    Fulfillment Status
-                  </label>
-                  <select
-                    value={selectedOrder.status}
-                    onChange={(e) => handleUpdateStatus(e.target.value as OrderStatus)}
-                    className="adm-select w-full px-3 py-2 border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
-                  >
-                    <option value="PENDING">PENDING</option>
-                    <option value="CONFIRMED">CONFIRMED</option>
-                    <option value="PROCESSING">PROCESSING</option>
-                    <option value="SHIPPED">SHIPPED</option>
-                    <option value="DELIVERED">DELIVERED</option>
-                    <option value="CANCELLED">CANCELLED</option>
-                  </select>
-                </div>
+                <GlassDropdown
+                  label="Fulfillment Status"
+                  options={fulfillmentOptions}
+                  value={selectedOrder.status}
+                  onChange={(val) => handleUpdateStatus(val as OrderStatus)}
+                />
 
-                <div>
-                  <label className="block text-[10px] uppercase tracking-wider adm-text-muted font-medium mb-1.5">
-                    Payment Status
-                  </label>
-                  <select
-                    value={selectedOrder.paymentStatus}
-                    onChange={(e) => handleUpdatePayment(e.target.value as PaymentStatus)}
-                    className="adm-select w-full px-3 py-2 border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
-                  >
-                    <option value="PENDING">PENDING</option>
-                    <option value="PAID">PAID</option>
-                    <option value="FAILED">FAILED</option>
-                    <option value="REFUNDED">REFUNDED</option>
-                  </select>
-                </div>
+                <GlassDropdown
+                  label="Payment Status"
+                  options={paymentOptions}
+                  value={selectedOrder.paymentStatus}
+                  onChange={(val) => handleUpdatePayment(val as PaymentStatus)}
+                />
               </div>
 
               {/* Items in this order */}

@@ -15,6 +15,13 @@ import {
 import { useAdminAuth } from '../admin-auth-context'
 import { AdminUser, UserRole } from '../admin-types'
 import { api } from '../../../lib/api-client'
+import { GlassDropdown, GlassDropdownOption } from '../../ui/GlassDropdown'
+
+const provisionRoleOptions: GlassDropdownOption[] = [
+  { value: 'STAFF', label: 'STAFF (Workshop, Inquiries & Fulfillment)', description: 'Can manage catalog, orders, and inquiries' },
+  { value: 'ADMIN', label: 'ADMIN (Full Master Control & Auditing)', description: 'Full root access, RBAC management, and deletion' },
+  { value: 'CUSTOMER', label: 'CUSTOMER (Patron Profile)', description: 'Standard storefront buyer access' },
+]
 
 export function UsersView() {
   const { canManageUsers, currentUser } = useAdminAuth()
@@ -465,20 +472,12 @@ export function UsersView() {
                 />
               </div>
 
-              <div>
-                <label className="block text-[11px] uppercase tracking-wider adm-text-muted font-medium mb-1.5">
-                  RBAC Role Tier *
-                </label>
-                <select
-                  value={role}
-                  onChange={(e) => setRole(e.target.value as UserRole)}
-                  className="adm-select w-full px-3 py-2 border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
-                >
-                  <option value="STAFF">STAFF (Workshop, Inquiries & Fulfillment)</option>
-                  <option value="ADMIN">ADMIN (Full Master Control & Auditing)</option>
-                  <option value="CUSTOMER">CUSTOMER (Patron Profile)</option>
-                </select>
-              </div>
+              <GlassDropdown
+                label="RBAC Role Tier *"
+                options={provisionRoleOptions}
+                value={role}
+                onChange={(val) => setRole(val as UserRole)}
+              />
 
               <div className="pt-2 flex items-center justify-end gap-2">
                 <button

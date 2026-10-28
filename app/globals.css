@@ -2605,15 +2605,86 @@ img {
 }
 
 /* ==========================================================================
-   Artisanal Custom Dropdown & Select Styling
+   Artisanal Glassmorphic Dropdown & Select Styling
    ========================================================================== */
+@keyframes glass-dropdown-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.glassmorphic-select-trigger {
+  background: rgba(255, 255, 255, 0.72) !important;
+  backdrop-filter: blur(18px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(180%) !important;
+  border: 1px solid rgba(66, 74, 112, 0.18) !important;
+  box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.85), 0 4px 12px -2px rgba(66, 74, 112, 0.06);
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.glassmorphic-select-trigger:hover {
+  background: rgba(255, 255, 255, 0.9) !important;
+  border-color: rgba(66, 74, 112, 0.38) !important;
+  box-shadow: inset 0 1px 1.5px 0 #ffffff, 0 6px 18px -2px rgba(66, 74, 112, 0.12);
+  transform: translateY(-1px);
+}
+
+.glassmorphic-select-trigger-open {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border-color: #424a70 !important;
+  box-shadow: inset 0 1px 1px 0 #ffffff, 0 0 0 3px rgba(66, 74, 112, 0.18), 0 8px 24px -4px rgba(66, 74, 112, 0.14) !important;
+}
+
+.admin-dashboard-root.dark .glassmorphic-select-trigger {
+  background: rgba(20, 24, 39, 0.75) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.12), 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+.admin-dashboard-root.dark .glassmorphic-select-trigger:hover {
+  background: rgba(24, 29, 46, 0.9) !important;
+  border-color: rgba(255, 255, 255, 0.28) !important;
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.18), 0 6px 20px rgba(0, 0, 0, 0.45);
+}
+
+.admin-dashboard-root.dark .glassmorphic-select-trigger-open {
+  background: rgba(26, 32, 51, 0.95) !important;
+  border-color: #818cf8 !important;
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.22), 0 0 0 3px rgba(129, 140, 248, 0.22), 0 8px 25px rgba(0, 0, 0, 0.5) !important;
+}
+
+.glassmorphic-dropdown-menu {
+  background: rgba(255, 255, 255, 0.88) !important;
+  backdrop-filter: blur(24px) saturate(200%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(200%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.9) !important;
+  border-radius: 1.125rem !important;
+  box-shadow: 0 16px 36px -4px rgba(28, 32, 51, 0.14), 0 6px 12px -2px rgba(28, 32, 51, 0.08), inset 0 1px 1px rgba(255, 255, 255, 0.95) !important;
+  animation: glass-dropdown-enter 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transform-origin: top center;
+}
+
+.admin-dashboard-root.dark .glassmorphic-dropdown-menu {
+  background: rgba(18, 22, 36, 0.9) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  box-shadow: 0 20px 42px -4px rgba(0, 0, 0, 0.65), 0 8px 16px -2px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+}
+
+/* Enhanced Glassmorphic styling for standard .adm-select and select elements */
 .adm-select,
 .admin-dashboard-root select:not(.raw-select) {
   appearance: none !important;
   -webkit-appearance: none !important;
   -moz-appearance: none !important;
-  background-color: var(--adm-input-bg);
-  border: 1px solid var(--adm-input-border);
+  background-color: rgba(255, 255, 255, 0.72) !important;
+  backdrop-filter: blur(16px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
+  border: 1px solid rgba(66, 74, 112, 0.18) !important;
   color: var(--adm-input-text);
   border-radius: 0.75rem;
   padding-left: 0.875rem;
@@ -2627,35 +2698,46 @@ img {
   background-position: right 0.75rem center !important;
   background-size: 14px 14px !important;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23424a70' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
-  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.85), 0 2px 8px -2px rgba(66, 74, 112, 0.05);
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
 
 .admin-dashboard-root.dark .adm-select,
 .admin-dashboard-root.dark select:not(.raw-select) {
+  background-color: rgba(20, 24, 39, 0.75) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.12), 0 4px 16px rgba(0, 0, 0, 0.35);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23d1d5db' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
 }
 
 .adm-select:hover,
 .admin-dashboard-root select:not(.raw-select):hover {
-  border-color: rgba(66, 74, 112, 0.45);
+  background-color: rgba(255, 255, 255, 0.9) !important;
+  border-color: rgba(66, 74, 112, 0.4) !important;
+  box-shadow: inset 0 1px 1.5px 0 #ffffff, 0 4px 14px -1px rgba(66, 74, 112, 0.1);
+  transform: translateY(-1px);
 }
 
 .admin-dashboard-root.dark .adm-select:hover,
 .admin-dashboard-root.dark select:not(.raw-select):hover {
-  border-color: rgba(255, 255, 255, 0.28);
+  background-color: rgba(24, 29, 46, 0.88) !important;
+  border-color: rgba(255, 255, 255, 0.28) !important;
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.18), 0 6px 18px rgba(0, 0, 0, 0.45);
 }
 
 .adm-select:focus,
 .admin-dashboard-root select:not(.raw-select):focus {
   outline: none !important;
+  background-color: rgba(255, 255, 255, 0.95) !important;
   border-color: #424a70 !important;
-  box-shadow: 0 0 0 3px rgba(66, 74, 112, 0.16) !important;
+  box-shadow: inset 0 1px 1px 0 #ffffff, 0 0 0 3px rgba(66, 74, 112, 0.18), 0 6px 20px -2px rgba(66, 74, 112, 0.12) !important;
 }
 
 .admin-dashboard-root.dark .adm-select:focus,
 .admin-dashboard-root.dark select:not(.raw-select):focus {
+  background-color: rgba(26, 32, 51, 0.95) !important;
   border-color: #818cf8 !important;
-  box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.22) !important;
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.22), 0 0 0 3px rgba(129, 140, 248, 0.22), 0 8px 24px rgba(0, 0, 0, 0.5) !important;
 }
 
 /* Compact select variant for tables */
@@ -2673,17 +2755,21 @@ img {
 
 /* Custom dropdown popover container */
 .adm-dropdown-menu {
-  background-color: var(--adm-card);
-  border: 1px solid var(--adm-card-border);
-  box-shadow: 0 10px 25px -5px rgba(28, 32, 51, 0.12), 0 8px 10px -6px rgba(28, 32, 51, 0.08);
-  border-radius: 0.875rem;
-  backdrop-filter: blur(16px);
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(24px) saturate(190%);
+  -webkit-backdrop-filter: blur(24px) saturate(190%);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 16px 36px -4px rgba(28, 32, 51, 0.14), 0 6px 12px -2px rgba(28, 32, 51, 0.08), inset 0 1px 1px rgba(255, 255, 255, 0.95);
+  border-radius: 1rem;
   z-index: 50;
   overflow: hidden;
+  animation: glass-dropdown-enter 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .admin-dashboard-root.dark .adm-dropdown-menu {
-  box-shadow: 0 12px 30px -4px rgba(0, 0, 0, 0.5), 0 8px 12px -6px rgba(0, 0, 0, 0.4);
+  background: rgba(18, 22, 36, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 20px 42px -4px rgba(0, 0, 0, 0.65), 0 8px 16px -2px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
 /* UNIFORT Admin Action Button Utilities */
