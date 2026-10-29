@@ -20,6 +20,7 @@ import {
   FolderOpen,
   RefreshCw,
   Filter,
+  SlidersHorizontal,
 } from 'lucide-react'
 import { useAdminAuth } from '../admin-auth-context'
 import { ProductItem, ItemStatus, ModelType, CategoryItem } from '../admin-types'
@@ -42,6 +43,7 @@ export function ProductsView() {
   const [searchQuery, setSearchQuery] = useState('')
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(20)
+  const [showMobileFilters, setShowMobileFilters] = useState(false)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -491,10 +493,10 @@ export function ProductsView() {
 
       {/* Modern Filter Toolbar */}
       <div className="adm-card border adm-border rounded-2xl p-4 shadow-sm space-y-3.5">
-        {/* Row 1: Search + Status + Category + 3D Studio */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+        {/* Search Bar + Mobile Filters Toggle */}
+        <div className="flex items-center gap-2">
           {/* Keyword Search */}
-          <div className="relative">
+          <div className="relative flex-1">
             <Search className="w-3.5 h-3.5 adm-text-muted absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
@@ -520,6 +522,28 @@ export function ProductsView() {
             )}
           </div>
 
+          {/* Mobile Filter Toggle Button */}
+          <button
+            type="button"
+            onClick={() => setShowMobileFilters(!showMobileFilters)}
+            className={`sm:hidden px-3 py-2 rounded-xl border text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 ${
+              showMobileFilters || activeFilterCount > 0
+                ? 'tab-active !bg-[#424a70] !text-white border-[#424a70]'
+                : 'adm-card border adm-border adm-text-secondary'
+            }`}
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+            <span>Filters</span>
+            {activeFilterCount > 0 && (
+              <span className="badge-count w-4 h-4 rounded-full !bg-white !text-[#424a70] text-[10px] font-bold flex items-center justify-center ml-0.5">
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Dropdowns: Collapsible on Mobile, Grid on Tablet/Desktop */}
+        <div className={`${showMobileFilters ? 'grid' : 'hidden sm:grid'} grid-cols-1 sm:grid-cols-3 gap-2.5`}>
           {/* Status Dropdown */}
           <div className="relative">
             <select
@@ -528,16 +552,13 @@ export function ProductsView() {
                 setStatusFilter(e.target.value)
                 setPage(1)
               }}
-              className="w-full px-3 py-2 adm-input border rounded-xl text-xs adm-text-primary focus:outline-none focus:border-[#424a70] transition-colors appearance-none cursor-pointer"
+              className="w-full px-3 py-2 adm-input border rounded-xl text-xs adm-text-primary focus:outline-none focus:border-[#424a70] transition-colors cursor-pointer"
             >
               <option value="ALL">All Statuses</option>
               <option value="DRAFT">DRAFT (Drafting State)</option>
               <option value="PUBLISHED">PUBLISHED (Live in Store)</option>
               <option value="ARCHIVED">ARCHIVED (Decommissioned)</option>
             </select>
-            <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs adm-text-muted">
-              ▼
-            </div>
           </div>
 
           {/* Dynamic Category Dropdown */}
@@ -548,7 +569,7 @@ export function ProductsView() {
                 setCategoryFilter(e.target.value)
                 setPage(1)
               }}
-              className="w-full px-3 py-2 adm-input border rounded-xl text-xs adm-text-primary focus:outline-none focus:border-[#424a70] transition-colors appearance-none cursor-pointer"
+              className="w-full px-3 py-2 adm-input border rounded-xl text-xs adm-text-primary focus:outline-none focus:border-[#424a70] transition-colors cursor-pointer"
             >
               <option value="ALL">All Categories</option>
               {categories.map((c) => (
@@ -557,9 +578,6 @@ export function ProductsView() {
                 </option>
               ))}
             </select>
-            <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs adm-text-muted">
-              ▼
-            </div>
           </div>
 
           {/* 3D Studio Customization Dropdown */}
@@ -570,20 +588,17 @@ export function ProductsView() {
                 setCustomFilter(e.target.value)
                 setPage(1)
               }}
-              className="w-full px-3 py-2 adm-input border rounded-xl text-xs adm-text-primary focus:outline-none focus:border-[#424a70] transition-colors appearance-none cursor-pointer"
+              className="w-full px-3 py-2 adm-input border rounded-xl text-xs adm-text-primary focus:outline-none focus:border-[#424a70] transition-colors cursor-pointer"
             >
               <option value="ALL">All Pieces (3D + Standard)</option>
               <option value="CUSTOMIZABLE">3D Studio Customizable Only</option>
               <option value="STANDARD">Standard Tableware Only</option>
             </select>
-            <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs adm-text-muted">
-              ▼
-            </div>
           </div>
         </div>
 
-        {/* Row 2: Stock Status + Sort Order + Active Filter Badges */}
-        <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2 border-t adm-border">
+        {/* Row 2: Stock Status + Sort Order + Active Filter Badges (Collapsible on Mobile) */}
+        <div className={`${showMobileFilters ? 'flex' : 'hidden sm:flex'} flex-wrap items-center justify-between gap-2.5 pt-2 border-t adm-border`}>
           <div className="flex flex-wrap items-center gap-2">
             {/* Stock Status Dropdown */}
             <div className="flex items-center gap-1.5">
@@ -751,8 +766,9 @@ export function ProductsView() {
           </div>
         </div>
       ) : (
-        <div className="adm-card border adm-border rounded-2xl overflow-hidden">
-          <table className="w-full text-left border-collapse">
+        <div className="adm-card border adm-border rounded-2xl overflow-hidden shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b adm-border adm-table-head text-[10px] uppercase tracking-wider adm-text-muted font-medium">
                 <th className="py-3 px-4 w-14">Image</th>
@@ -859,8 +875,9 @@ export function ProductsView() {
               ))}
             </tbody>
           </table>
+        </div>
 
-          {/* Reusable Pagination */}
+        {/* Reusable Pagination */}
           <AdminPagination
             page={page}
             limit={limit}

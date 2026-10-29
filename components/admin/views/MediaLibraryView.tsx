@@ -230,17 +230,6 @@ export function MediaLibraryView({
               }
             }}
           />
-
-          <UnifortButton
-            variant="primary"
-            size="sm"
-            rounded="xl"
-            icon={<UploadCloud className="w-4 h-4" />}
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isUploading}
-          >
-            {isUploading ? 'Uploading...' : 'Upload Asset'}
-          </UnifortButton>
         </div>
       </div>
 
@@ -291,7 +280,7 @@ export function MediaLibraryView({
             onClick={() => setActiveTab('all')}
             className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'all'
-                ? 'bg-[#424a70] text-white shadow-xs'
+                ? 'tab-active !bg-[#424a70] !text-white [&_*]:!text-white shadow-xs'
                 : 'adm-text-secondary hover:bg-black/5 dark:hover:bg-white/5'
             }`}
           >
@@ -301,7 +290,7 @@ export function MediaLibraryView({
             onClick={() => setActiveTab('assigned')}
             className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
               activeTab === 'assigned'
-                ? 'bg-[#424a70] text-white shadow-xs'
+                ? 'tab-active !bg-[#424a70] !text-white [&_*]:!text-white shadow-xs'
                 : 'adm-text-secondary hover:bg-black/5 dark:hover:bg-white/5'
             }`}
           >
@@ -314,7 +303,7 @@ export function MediaLibraryView({
             onClick={() => setActiveTab('unassigned')}
             className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
               activeTab === 'unassigned'
-                ? 'bg-[#424a70] text-white shadow-xs'
+                ? 'tab-active !bg-[#424a70] !text-white [&_*]:!text-white shadow-xs'
                 : 'adm-text-secondary hover:bg-black/5 dark:hover:bg-white/5'
             }`}
           >

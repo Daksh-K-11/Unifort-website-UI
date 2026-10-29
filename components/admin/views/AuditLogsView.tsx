@@ -22,10 +22,12 @@ import {
   Layers,
   Copy,
   Check,
+  SlidersHorizontal,
 } from 'lucide-react'
 import { useAdminAuth } from '../admin-auth-context'
 import { AuditLogRecord, UserRole } from '../admin-types'
 import { api } from '../../../lib/api-client'
+import { AdminPagination } from '../AdminPagination'
 
 interface PaginationState {
   page: number
@@ -58,6 +60,7 @@ export function AuditLogsView() {
   const [customStartDate, setCustomStartDate] = useState<string>('')
   const [customEndDate, setCustomEndDate] = useState<string>('')
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc')
+  const [showMobileFilters, setShowMobileFilters] = useState(false)
 
   // Pagination state
   const [page, setPage] = useState(1)
@@ -336,10 +339,10 @@ export function AuditLogsView() {
 
       {/* Filter Bar with Sleek Compact Controls */}
       <div className="adm-card border adm-border rounded-2xl p-4 shadow-sm space-y-3.5">
-        {/* Row 1: Search + Dynamic Action Filter + Role + Staff Operator */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+        {/* Search Bar + Mobile Filters Toggle */}
+        <div className="flex items-center gap-2">
           {/* Keyword Search */}
-          <div className="relative">
+          <div className="relative flex-1">
             <Search className="w-3.5 h-3.5 adm-text-muted absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
@@ -365,6 +368,28 @@ export function AuditLogsView() {
             )}
           </div>
 
+          {/* Mobile Filter Toggle Button */}
+          <button
+            type="button"
+            onClick={() => setShowMobileFilters(!showMobileFilters)}
+            className={`sm:hidden px-3 py-2 rounded-xl border text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 ${
+              showMobileFilters || activeFilterCount > 0
+                ? 'tab-active !bg-[#424a70] !text-white border-[#424a70]'
+                : 'adm-card border adm-border adm-text-secondary'
+            }`}
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+            <span>Filters</span>
+            {activeFilterCount > 0 && (
+              <span className="badge-count w-4 h-4 rounded-full !bg-white !text-[#424a70] text-[10px] font-bold flex items-center justify-center ml-0.5">
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Dropdowns: Collapsible on Mobile, Grid on Tablet/Desktop */}
+        <div className={`${showMobileFilters ? 'grid' : 'hidden sm:grid'} grid-cols-1 sm:grid-cols-3 gap-2.5`}>
           {/* Dynamic Action Dropdown */}
           <div className="relative">
             <select
@@ -373,7 +398,7 @@ export function AuditLogsView() {
                 setSelectedAction(e.target.value)
                 setPage(1)
               }}
-              className="w-full px-3 py-2 adm-input border rounded-xl text-xs adm-text-primary focus:outline-none focus:border-[#424a70] transition-colors appearance-none cursor-pointer"
+              className="w-full px-3 py-2 adm-input border rounded-xl text-xs adm-text-primary focus:outline-none focus:border-[#424a70] transition-colors cursor-pointer"
             >
               <option value="ALL">All Action Hooks</option>
               {dynamicFilterOptions.actions.map((act) => (
@@ -382,9 +407,6 @@ export function AuditLogsView() {
                 </option>
               ))}
             </select>
-            <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs adm-text-muted">
-              ▼
-            </div>
           </div>
 
           {/* Role Dropdown */}
@@ -395,16 +417,13 @@ export function AuditLogsView() {
                 setSelectedRole(e.target.value)
                 setPage(1)
               }}
-              className="w-full px-3 py-2 adm-input border rounded-xl text-xs adm-text-primary focus:outline-none focus:border-[#424a70] transition-colors appearance-none cursor-pointer"
+              className="w-full px-3 py-2 adm-input border rounded-xl text-xs adm-text-primary focus:outline-none focus:border-[#424a70] transition-colors cursor-pointer"
             >
               <option value="ALL">All Roles</option>
               <option value="ADMIN">ADMIN (Master)</option>
               <option value="STAFF">STAFF (Atelier)</option>
               <option value="CUSTOMER">CUSTOMER (Patron)</option>
             </select>
-            <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs adm-text-muted">
-              ▼
-            </div>
           </div>
 
           {/* Dynamic Staff / Operator Dropdown */}
@@ -415,7 +434,7 @@ export function AuditLogsView() {
                 setSelectedOperator(e.target.value)
                 setPage(1)
               }}
-              className="w-full px-3 py-2 adm-input border rounded-xl text-xs adm-text-primary focus:outline-none focus:border-[#424a70] transition-colors appearance-none cursor-pointer"
+              className="w-full px-3 py-2 adm-input border rounded-xl text-xs adm-text-primary focus:outline-none focus:border-[#424a70] transition-colors cursor-pointer"
             >
               <option value="ALL">All Operators</option>
               {dynamicFilterOptions.operators.map((op) => (
@@ -424,14 +443,11 @@ export function AuditLogsView() {
                 </option>
               ))}
             </select>
-            <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs adm-text-muted">
-              ▼
-            </div>
           </div>
         </div>
 
-        {/* Row 2: Date & Time Filters + Sort Order + Reset Button */}
-        <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2 border-t adm-border">
+        {/* Row 2: Date & Time Filters + Sort Order + Reset Button (Collapsible on Mobile) */}
+        <div className={`${showMobileFilters ? 'flex' : 'hidden sm:flex'} flex-wrap items-center justify-between gap-2.5 pt-2 border-t adm-border`}>
           <div className="flex flex-wrap items-center gap-2">
             {/* Time Presets */}
             <div className="flex items-center gap-1.5">
@@ -625,86 +641,19 @@ export function AuditLogsView() {
             </table>
           </div>
 
-          {/* Pagination Controls */}
-          <div className="p-3.5 border-t adm-border flex flex-col sm:flex-row items-center justify-between gap-3 text-xs adm-text-muted bg-[rgba(66,74,112,0.02)]">
-            {/* Left: Summary */}
-            <div className="flex items-center gap-2">
-              <span>
-                Showing{' '}
-                <strong className="adm-text-primary">
-                  {pagination.total === 0 ? 0 : (pagination.page - 1) * pagination.limit + 1}
-                </strong>{' '}
-                to{' '}
-                <strong className="adm-text-primary">
-                  {Math.min(pagination.page * pagination.limit, pagination.total)}
-                </strong>{' '}
-                of <strong className="adm-text-primary">{pagination.total}</strong> entries
-              </span>
-
-              {/* Rows Per Page */}
-              <div className="flex items-center gap-1.5 ml-2 border-l adm-border pl-3">
-                <span>Rows:</span>
-                <select
-                  value={limit}
-                  onChange={(e) => {
-                    setLimit(Number(e.target.value))
-                    setPage(1)
-                  }}
-                  className="px-2 py-1 adm-input border rounded-lg text-xs adm-text-primary focus:outline-none focus:border-[#424a70] cursor-pointer"
-                >
-                  <option value={10}>10</option>
-                  <option value={20}>20</option>
-                  <option value={50}>50</option>
-                  <option value={100}>100</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Right: Page Navigation Buttons */}
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => setPage(1)}
-                disabled={pagination.page <= 1}
-                className="p-1.5 rounded-lg border adm-border hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                title="First Page"
-              >
-                <ChevronsLeft className="w-3.5 h-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={pagination.page <= 1}
-                className="p-1.5 rounded-lg border adm-border hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                title="Previous Page"
-              >
-                <ChevronLeft className="w-3.5 h-3.5" />
-              </button>
-
-              <div className="px-3 py-1 font-mono text-xs font-semibold adm-text-primary">
-                Page {pagination.page} of {pagination.totalPages}
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))}
-                disabled={pagination.page >= pagination.totalPages}
-                className="p-1.5 rounded-lg border adm-border hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                title="Next Page"
-              >
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setPage(pagination.totalPages)}
-                disabled={pagination.page >= pagination.totalPages}
-                className="p-1.5 rounded-lg border adm-border hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                title="Last Page"
-              >
-                <ChevronsRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
+          {/* Reusable Pagination */}
+          <AdminPagination
+            page={page}
+            limit={limit}
+            total={pagination.total}
+            totalPages={pagination.totalPages}
+            onPageChange={setPage}
+            onLimitChange={(l) => {
+              setLimit(l)
+              setPage(1)
+            }}
+            itemName="audit logs"
+          />
         </div>
       )}
 

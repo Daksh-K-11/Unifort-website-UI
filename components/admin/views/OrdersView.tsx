@@ -15,6 +15,7 @@ import {
   Truck,
   CheckCircle2,
   AlertCircle,
+  SlidersHorizontal,
 } from 'lucide-react'
 import { useAdminAuth } from '../admin-auth-context'
 import { OrderRecord, OrderStatus, PaymentStatus } from '../admin-types'
@@ -53,6 +54,7 @@ export function OrdersView() {
   const [customStartDate, setCustomStartDate] = useState('')
   const [customEndDate, setCustomEndDate] = useState('')
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'amount_desc' | 'amount_asc'>('newest')
+  const [showMobileFilters, setShowMobileFilters] = useState(false)
 
   // Pagination state
   const [page, setPage] = useState(1)
@@ -276,10 +278,10 @@ export function OrdersView() {
 
       {/* Modern Filter Toolbar */}
       <div className="adm-card border adm-border rounded-2xl p-4 shadow-sm space-y-3.5">
-        {/* Row 1: Search + Fulfillment Status + Payment Status + Bespoke Filter */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+        {/* Row 1: Search + Mobile Filter Toggle */}
+        <div className="flex items-center gap-2">
           {/* Keyword Search */}
-          <div className="relative">
+          <div className="relative flex-1">
             <Search className="w-3.5 h-3.5 adm-text-muted absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
@@ -305,6 +307,28 @@ export function OrdersView() {
             )}
           </div>
 
+          {/* Mobile Filter Toggle Button */}
+          <button
+            type="button"
+            onClick={() => setShowMobileFilters(!showMobileFilters)}
+            className={`sm:hidden px-3 py-2 rounded-xl border text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 ${
+              showMobileFilters || activeFilterCount > 0
+                ? 'tab-active !bg-[#424a70] !text-white border-[#424a70]'
+                : 'adm-card border adm-border adm-text-secondary'
+            }`}
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+            <span>Filters</span>
+            {activeFilterCount > 0 && (
+              <span className="badge-count w-4 h-4 rounded-full !bg-white !text-[#424a70] text-[10px] font-bold flex items-center justify-center ml-0.5">
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Dropdowns: Collapsible on Mobile, Grid on Tablet/Desktop */}
+        <div className={`${showMobileFilters ? 'grid' : 'hidden sm:grid'} grid-cols-1 sm:grid-cols-3 gap-2.5`}>
           {/* Fulfillment Status Dropdown */}
           <div className="relative">
             <select
@@ -313,7 +337,7 @@ export function OrdersView() {
                 setStatusFilter(e.target.value)
                 setPage(1)
               }}
-              className="w-full px-3 py-2 adm-input border rounded-xl text-xs adm-text-primary focus:outline-none focus:border-[#424a70] transition-colors appearance-none cursor-pointer"
+              className="w-full px-3 py-2 adm-input border rounded-xl text-xs adm-text-primary focus:outline-none focus:border-[#424a70] transition-colors cursor-pointer"
             >
               <option value="ALL">All Fulfillment Statuses</option>
               <option value="PENDING">PENDING (Awaiting Confirmation)</option>
@@ -323,9 +347,6 @@ export function OrdersView() {
               <option value="DELIVERED">DELIVERED (Fulfilled)</option>
               <option value="CANCELLED">CANCELLED</option>
             </select>
-            <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs adm-text-muted">
-              ▼
-            </div>
           </div>
 
           {/* Payment Status Dropdown */}
@@ -336,7 +357,7 @@ export function OrdersView() {
                 setPaymentFilter(e.target.value)
                 setPage(1)
               }}
-              className="w-full px-3 py-2 adm-input border rounded-xl text-xs adm-text-primary focus:outline-none focus:border-[#424a70] transition-colors appearance-none cursor-pointer"
+              className="w-full px-3 py-2 adm-input border rounded-xl text-xs adm-text-primary focus:outline-none focus:border-[#424a70] transition-colors cursor-pointer"
             >
               <option value="ALL">All Payment Statuses</option>
               <option value="PAID">PAID (Settled)</option>
@@ -344,9 +365,6 @@ export function OrdersView() {
               <option value="FAILED">FAILED (Declined)</option>
               <option value="REFUNDED">REFUNDED</option>
             </select>
-            <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs adm-text-muted">
-              ▼
-            </div>
           </div>
 
           {/* Bespoke / Standard Piece Filter */}
@@ -357,20 +375,17 @@ export function OrdersView() {
                 setBespokeFilter(e.target.value)
                 setPage(1)
               }}
-              className="w-full px-3 py-2 adm-input border rounded-xl text-xs adm-text-primary focus:outline-none focus:border-[#424a70] transition-colors appearance-none cursor-pointer"
+              className="w-full px-3 py-2 adm-input border rounded-xl text-xs adm-text-primary focus:outline-none focus:border-[#424a70] transition-colors cursor-pointer"
             >
               <option value="ALL">All Order Types</option>
               <option value="BESPOKE_ONLY">Contains 3D Bespoke Pieces</option>
               <option value="STANDARD_ONLY">Standard Catalog Orders</option>
             </select>
-            <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs adm-text-muted">
-              ▼
-            </div>
           </div>
         </div>
 
-        {/* Row 2: Date & Time Filters + Sort Order + Active Filter Badges */}
-        <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2 border-t adm-border">
+        {/* Row 2: Date & Time Filters + Sort Order + Active Filter Badges (Collapsible on Mobile) */}
+        <div className={`${showMobileFilters ? 'flex' : 'hidden sm:flex'} flex-wrap items-center justify-between gap-2.5 pt-2 border-t adm-border`}>
           <div className="flex flex-wrap items-center gap-2">
             {/* Time Presets */}
             <div className="flex items-center gap-1.5">

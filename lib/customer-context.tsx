@@ -105,7 +105,11 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
       productId: it.productId || it.product?.id || '',
       productName: it.productName || it.product?.name || 'Handcrafted Tableware',
       productType: it.productType || it.product?.type || 'Atelier Ceramic',
-      productImage: it.productImage || it.customSnapshotUrl || it.product?.image || '/products/unifort-plate-light.jpg',
+      productImage:
+        (it.productImage?.startsWith('/unifort-') ? `/products${it.productImage}` : it.productImage) ||
+        it.customSnapshotUrl ||
+        (it.product?.image?.startsWith('/unifort-') ? `/products${it.product.image}` : it.product?.image) ||
+        '/products/unifort-plate-light.jpg',
       price: Number(it.price || 0),
       quantity: it.quantity || 1,
       bespokeDesignId: it.customDesignId || undefined,
@@ -148,7 +152,10 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
       primaryGlazeColor: d.primaryGlazeColor || '#2B2B2B',
       accentGlazeColor: d.accentGlazeColor || undefined,
       status: d.status || 'DRAFT',
-      previewUrl: d.thumbnailUrl || d.previewUrl || '/products/unifort-plate-light.jpg',
+      previewUrl:
+        (d.thumbnailUrl?.startsWith('/unifort-') ? `/products${d.thumbnailUrl}` : d.thumbnailUrl) ||
+        (d.previewUrl?.startsWith('/unifort-') ? `/products${d.previewUrl}` : d.previewUrl) ||
+        '/products/unifort-plate-light.jpg',
       craftsmanNotes: d.craftsmanNotes || undefined,
       elementsCount: Array.isArray(d.customElements) ? d.customElements.length : (d.elementsCount || 1),
       createdAt: d.createdAt,

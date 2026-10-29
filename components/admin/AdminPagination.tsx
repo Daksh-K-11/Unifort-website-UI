@@ -59,25 +59,25 @@ export function AdminPagination({
   const visiblePages = getVisiblePages()
 
   return (
-    <div className="p-3.5 border-t adm-border flex flex-col sm:flex-row items-center justify-between gap-3 text-xs adm-text-muted bg-[rgba(66,74,112,0.02)]">
+    <div className="p-3.5 border-t adm-border flex flex-col sm:flex-row items-center justify-between gap-3 text-xs bg-[rgba(66,74,112,0.02)]">
       {/* Summary and rows selector */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span>
+      <div className="flex flex-wrap items-center justify-between w-full sm:w-auto gap-2">
+        <span className="text-slate-700 dark:text-slate-300">
           Showing{' '}
-          <strong className="adm-text-primary font-semibold">{startEntry}</strong>{' '}
+          <strong className="text-slate-900 dark:text-white font-bold">{startEntry}</strong>{' '}
           to{' '}
-          <strong className="adm-text-primary font-semibold">{endEntry}</strong>{' '}
+          <strong className="text-slate-900 dark:text-white font-bold">{endEntry}</strong>{' '}
           of{' '}
-          <strong className="adm-text-primary font-semibold">{total}</strong>{' '}
+          <strong className="text-slate-900 dark:text-white font-bold">{total}</strong>{' '}
           {itemName}
         </span>
 
-        <div className="flex items-center gap-1.5 ml-2 border-l adm-border pl-3">
-          <span>Rows:</span>
+        <div className="flex items-center gap-1.5 ml-auto sm:ml-2 sm:border-l adm-border sm:pl-3">
+          <span className="text-slate-600 dark:text-slate-400 font-medium">Rows:</span>
           <select
             value={limit}
             onChange={(e) => onLimitChange(Number(e.target.value))}
-            className="px-2 py-1 adm-input border rounded-lg text-xs adm-text-primary focus:outline-none focus:border-[#424a70] cursor-pointer"
+            className="raw-select px-2 py-1 bg-white dark:bg-[#141827] text-slate-900 dark:text-white border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-semibold focus:outline-none focus:border-[#424a70] cursor-pointer shadow-2xs"
             title="Rows per page"
           >
             {limitOptions.map((opt) => (
@@ -95,7 +95,7 @@ export function AdminPagination({
           type="button"
           onClick={() => onPageChange(1)}
           disabled={page <= 1}
-          className="p-1.5 rounded-lg border adm-border hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="p-1.5 rounded-lg bg-white dark:bg-[#141827] text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-800 hover:bg-[#424a70]/10 hover:text-[#424a70] disabled:opacity-30 disabled:cursor-not-allowed transition-colors shadow-2xs"
           title="First Page"
         >
           <ChevronsLeft className="w-3.5 h-3.5" />
@@ -105,19 +105,25 @@ export function AdminPagination({
           type="button"
           onClick={() => onPageChange(Math.max(1, page - 1))}
           disabled={page <= 1}
-          className="p-1.5 rounded-lg border adm-border hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="p-1.5 rounded-lg bg-white dark:bg-[#141827] text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-800 hover:bg-[#424a70]/10 hover:text-[#424a70] disabled:opacity-30 disabled:cursor-not-allowed transition-colors shadow-2xs"
           title="Previous Page"
         >
           <ChevronLeft className="w-3.5 h-3.5" />
         </button>
 
-        <div className="flex items-center gap-1 mx-1">
+        {/* Mobile Page Indicator */}
+        <span className="sm:hidden px-2 text-xs font-semibold text-slate-900 dark:text-white">
+          Page {page} of {totalPages}
+        </span>
+
+        {/* Desktop Numbered Page Buttons */}
+        <div className="hidden sm:flex items-center gap-1 mx-1">
           {visiblePages.map((p, idx) => {
             if (p === 'ellipsis') {
               return (
                 <span
                   key={`ellipsis-${idx}`}
-                  className="px-1.5 text-slate-400 select-none"
+                  className="px-1.5 text-slate-500 dark:text-slate-400 font-bold select-none"
                 >
                   …
                 </span>
@@ -129,10 +135,10 @@ export function AdminPagination({
                 key={p}
                 type="button"
                 onClick={() => onPageChange(p)}
-                className={`w-7 h-7 rounded-lg text-xs font-medium transition-colors ${
+                className={`w-7 h-7 rounded-lg text-xs font-semibold transition-all ${
                   isCurrent
-                    ? 'bg-[#424a70] text-white font-bold shadow-2xs'
-                    : 'border adm-border hover:bg-black/5 dark:hover:bg-white/5 adm-text-secondary'
+                    ? '!bg-[#424a70] !text-white font-bold shadow-xs border border-[#424a70]'
+                    : 'bg-white dark:bg-[#141827] text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-800 hover:border-[#424a70] hover:text-[#424a70] shadow-2xs'
                 }`}
               >
                 {p}
@@ -145,7 +151,7 @@ export function AdminPagination({
           type="button"
           onClick={() => onPageChange(Math.min(totalPages, page + 1))}
           disabled={page >= totalPages}
-          className="p-1.5 rounded-lg border adm-border hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="p-1.5 rounded-lg bg-white dark:bg-[#141827] text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-800 hover:bg-[#424a70]/10 hover:text-[#424a70] disabled:opacity-30 disabled:cursor-not-allowed transition-colors shadow-2xs"
           title="Next Page"
         >
           <ChevronRight className="w-3.5 h-3.5" />
@@ -155,7 +161,7 @@ export function AdminPagination({
           type="button"
           onClick={() => onPageChange(totalPages)}
           disabled={page >= totalPages}
-          className="p-1.5 rounded-lg border adm-border hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="p-1.5 rounded-lg bg-white dark:bg-[#141827] text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-800 hover:bg-[#424a70]/10 hover:text-[#424a70] disabled:opacity-30 disabled:cursor-not-allowed transition-colors shadow-2xs"
           title="Last Page"
         >
           <ChevronsRight className="w-3.5 h-3.5" />
@@ -164,4 +170,3 @@ export function AdminPagination({
     </div>
   )
 }
-

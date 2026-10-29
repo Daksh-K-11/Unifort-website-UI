@@ -165,7 +165,11 @@ export function CustomizeCatalog({
                 {/* Product Image */}
                 <div className="relative aspect-square w-full rounded-2xl overflow-hidden bg-[rgba(66,74,112,0.05)] mb-3.5">
                   <Image
-                    src={product.image}
+                    src={
+                      product.image?.startsWith('/unifort-')
+                        ? `/products${product.image}`
+                        : product.image || '/products/unifort-plate-light.jpg'
+                    }
                     alt={product.name}
                     fill
                     sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"

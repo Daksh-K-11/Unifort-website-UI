@@ -174,8 +174,9 @@ export function ReviewsView() {
           </p>
         </div>
       ) : (
-        <div className="adm-card border adm-border rounded-2xl overflow-hidden">
-          <table className="w-full text-left border-collapse">
+        <div className="adm-card border adm-border rounded-2xl overflow-hidden shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b adm-border adm-table-head text-[10px] uppercase tracking-wider adm-text-muted font-medium">
                 <th className="py-3 px-4">Patron & Piece</th>
@@ -314,6 +315,7 @@ export function ReviewsView() {
             </tbody>
           </table>
         </div>
+      </div>
       )}
     </div>
   )

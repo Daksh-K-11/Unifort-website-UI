@@ -18,6 +18,21 @@ interface SavedDesignsModalProps {
   onLoadDesign: (design: SavedDesign) => void
 }
 
+const getSavedDesignThumbnail = (d: SavedDesign): string => {
+  if (d.thumbnailUrl && typeof d.thumbnailUrl === 'string') {
+    if (d.thumbnailUrl.startsWith('/unifort-')) return `/products${d.thumbnailUrl}`
+    return d.thumbnailUrl
+  }
+  const pid = (d.productId || d.productName || d.title || '').toLowerCase()
+  if (pid.includes('plate')) return '/products/unifort-plate-light.jpg'
+  if (pid.includes('bowl')) return '/products/unifort-bowl-light.jpg'
+  if (pid.includes('carafe')) return '/products/unifort-carafe-light.jpg'
+  if (pid.includes('tote')) return '/products/unifort-table-setting.jpg'
+  if (pid.includes('tumbler') || pid.includes('bottle')) return '/products/unifort-craft-glaze.jpg'
+  if (pid.includes('coaster')) return '/products/unifort-atelier-light.jpg'
+  return '/products/unifort-tumbler-light.jpg'
+}
+
 export function SavedDesignsModal({ isOpen, onClose, onLoadDesign }: SavedDesignsModalProps) {
   const [designs, setDesigns] = useState<SavedDesign[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -108,15 +123,17 @@ export function SavedDesignsModal({ isOpen, onClose, onLoadDesign }: SavedDesign
                   <div className="flex items-center gap-3 mb-2.5">
                     {/* Thumbnail */}
                     <div className="w-16 h-16 rounded-lg bg-[rgba(66,74,112,0.05)] border border-[rgba(66,74,112,0.12)] overflow-hidden shrink-0 flex items-center justify-center">
-                      {d.thumbnailUrl ? (
-                        <img
-                          src={d.thumbnailUrl}
-                          alt={d.title}
-                          className="w-full h-full object-contain"
-                        />
-                      ) : (
-                        <span className="text-[10px] text-[#687194] font-mono">3D</span>
-                      )}
+                      <img
+                        src={getSavedDesignThumbnail(d)}
+                        alt={d.title}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement
+                          if (!target.src.includes('unifort-tumbler-light.jpg')) {
+                            target.src = '/products/unifort-tumbler-light.jpg'
+                          }
+                        }}
+                      />
                     </div>
 
                     {/* Details */}

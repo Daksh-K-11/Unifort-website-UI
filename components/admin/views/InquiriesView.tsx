@@ -13,6 +13,7 @@ import {
   MessageSquare,
   FileText,
   Calendar,
+  SlidersHorizontal,
 } from 'lucide-react'
 import { useAdminAuth } from '../admin-auth-context'
 import { InquiryRecord, InquiryStatus } from '../admin-types'
@@ -41,6 +42,7 @@ export function InquiriesView() {
   const [customStartDate, setCustomStartDate] = useState('')
   const [customEndDate, setCustomEndDate] = useState('')
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc')
+  const [showMobileFilters, setShowMobileFilters] = useState(false)
 
   // Dynamic filter options from backend
   const [availableTypes, setAvailableTypes] = useState<string[]>([
@@ -252,10 +254,10 @@ export function InquiriesView() {
 
       {/* Modern Filter Toolbar */}
       <div className="adm-card border adm-border rounded-2xl p-4 shadow-sm space-y-3.5">
-        {/* Row 1: Search + Type Selector + Status Selector */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+        {/* Search Bar + Mobile Filters Toggle */}
+        <div className="flex items-center gap-2">
           {/* Keyword Search */}
-          <div className="relative">
+          <div className="relative flex-1">
             <Search className="w-3.5 h-3.5 adm-text-muted absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
@@ -281,6 +283,28 @@ export function InquiriesView() {
             )}
           </div>
 
+          {/* Mobile Filter Toggle Button */}
+          <button
+            type="button"
+            onClick={() => setShowMobileFilters(!showMobileFilters)}
+            className={`sm:hidden px-3 py-2 rounded-xl border text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 ${
+              showMobileFilters || activeFilterCount > 0
+                ? 'tab-active !bg-[#424a70] !text-white border-[#424a70]'
+                : 'adm-card border adm-border adm-text-secondary'
+            }`}
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+            <span>Filters</span>
+            {activeFilterCount > 0 && (
+              <span className="badge-count w-4 h-4 rounded-full !bg-white !text-[#424a70] text-[10px] font-bold flex items-center justify-center ml-0.5">
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Dropdowns: Collapsible on Mobile, Grid on Tablet/Desktop */}
+        <div className={`${showMobileFilters ? 'grid' : 'hidden sm:grid'} grid-cols-1 sm:grid-cols-2 gap-2.5`}>
           {/* Commission Type Dropdown */}
           <div className="relative">
             <select
@@ -289,7 +313,7 @@ export function InquiriesView() {
                 setTypeFilter(e.target.value)
                 setPage(1)
               }}
-              className="w-full px-3 py-2 adm-input border rounded-xl text-xs adm-text-primary focus:outline-none focus:border-[#424a70] transition-colors appearance-none cursor-pointer"
+              className="w-full px-3 py-2 adm-input border rounded-xl text-xs adm-text-primary focus:outline-none focus:border-[#424a70] transition-colors cursor-pointer"
             >
               <option value="ALL">All Commission Types</option>
               {availableTypes.map((t) => (
@@ -298,9 +322,6 @@ export function InquiriesView() {
                 </option>
               ))}
             </select>
-            <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs adm-text-muted">
-              ▼
-            </div>
           </div>
 
           {/* Status Dropdown */}
@@ -311,7 +332,7 @@ export function InquiriesView() {
                 setStatusFilter(e.target.value)
                 setPage(1)
               }}
-              className="w-full px-3 py-2 adm-input border rounded-xl text-xs adm-text-primary focus:outline-none focus:border-[#424a70] transition-colors appearance-none cursor-pointer"
+              className="w-full px-3 py-2 adm-input border rounded-xl text-xs adm-text-primary focus:outline-none focus:border-[#424a70] transition-colors cursor-pointer"
             >
               <option value="ALL">All Statuses</option>
               <option value="NEW">NEW (Awaiting First Response)</option>
@@ -319,14 +340,11 @@ export function InquiriesView() {
               <option value="RESOLVED">RESOLVED (Quote & Agreement)</option>
               <option value="CLOSED">CLOSED (Completed / Archived)</option>
             </select>
-            <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs adm-text-muted">
-              ▼
-            </div>
           </div>
         </div>
 
-        {/* Row 2: Date & Time Filters + Sort Order + Reset Button */}
-        <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2 border-t adm-border">
+        {/* Row 2: Date & Time Filters + Sort Order + Reset Button (Collapsible on Mobile) */}
+        <div className={`${showMobileFilters ? 'flex' : 'hidden sm:flex'} flex-wrap items-center justify-between gap-2.5 pt-2 border-t adm-border`}>
           <div className="flex flex-wrap items-center gap-2">
             {/* Time Presets */}
             <div className="flex items-center gap-1.5">

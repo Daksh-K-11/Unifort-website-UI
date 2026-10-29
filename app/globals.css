@@ -74,10 +74,17 @@ button.tab-active,
   color: #ffffff !important;
 }
 
-.tab-active *,
-button.tab-active *,
-[data-active="true"] * {
+.tab-active *:not(.badge-count),
+button.tab-active *:not(.badge-count),
+[data-active="true"] *:not(.badge-count) {
   color: #ffffff !important;
+}
+
+.badge-count,
+.tab-active .badge-count,
+button.tab-active .badge-count {
+  background-color: #ffffff !important;
+  color: #424a70 !important;
 }
 
 /* Primary buttons with .button class ensure background and text match */
@@ -2750,9 +2757,16 @@ img {
   color: #ffffff !important;
 }
 
-.admin-dashboard-root .tab-active *,
-.admin-dashboard-root button.tab-active * {
+.admin-dashboard-root .tab-active *:not(.badge-count),
+.admin-dashboard-root button.tab-active *:not(.badge-count) {
   color: #ffffff !important;
+}
+
+.admin-dashboard-root .badge-count,
+.admin-dashboard-root .tab-active .badge-count,
+.admin-dashboard-root button.tab-active .badge-count {
+  background-color: #ffffff !important;
+  color: #424a70 !important;
 }
 
 .admin-dashboard-root ::selection {
