@@ -9,6 +9,8 @@ import {
   Search,
   Edit3,
   X,
+  Trash2,
+  RotateCcw,
 } from 'lucide-react'
 import { useAdminAuth } from '../admin-auth-context'
 import { ReviewRecord, ReviewStatus } from '../admin-types'
@@ -28,28 +30,36 @@ export function ReviewsView() {
     try {
       const res = await api.get('/reviews/admin/all', {}, true)
       if (res.success && Array.isArray(res.data)) {
-        const mapped: ReviewRecord[] = res.data.map((r: any) => ({
-          id: r.id,
-          productId: r.productId,
-          product: r.product
-            ? {
-                name: r.product.name,
-                slug: r.product.slug,
-              }
-            : undefined,
-          userId: r.userId,
-          user: r.user
-            ? {
-                name: `${r.user.firstName || ''} ${r.user.lastName || ''}`.trim() || r.user.email,
-                email: r.user.email,
-              }
-            : undefined,
-          rating: r.rating,
-          title: r.title,
-          comment: r.comment,
-          status: r.isApproved ? ('APPROVED' as ReviewStatus) : ('PENDING' as ReviewStatus),
-          createdAt: r.createdAt,
-        }))
+        const mapped: ReviewRecord[] = res.data.map((r: any) => {
+          let status: ReviewStatus = 'PENDING'
+          if (r.status === 'APPROVED' || r.status === 'REJECTED' || r.status === 'PENDING') {
+            status = r.status as ReviewStatus
+          } else if (r.isApproved === true) {
+            status = 'APPROVED'
+          }
+          return {
+            id: r.id,
+            productId: r.productId,
+            product: r.product
+              ? {
+                  name: r.product.name,
+                  slug: r.product.slug,
+                }
+              : undefined,
+            userId: r.userId,
+            user: r.user
+              ? {
+                  name: `${r.user.firstName || ''} ${r.user.lastName || ''}`.trim() || r.user.email,
+                  email: r.user.email,
+                }
+              : undefined,
+            rating: r.rating,
+            title: r.title,
+            comment: r.comment,
+            status,
+            createdAt: r.createdAt,
+          }
+        })
         setReviews(mapped)
       }
     } catch (e) {
@@ -65,13 +75,33 @@ export function ReviewsView() {
 
   const handleModerate = async (id: string, newStatus: ReviewStatus) => {
     setReviews((prev) => prev.map((r) => (r.id === id ? { ...r, status: newStatus } : r)))
-    await api.patch(
-      `/reviews/${id}/moderate`,
-      { isApproved: newStatus === 'APPROVED' },
-      {},
-      true
-    )
+    try {
+      await api.patch(
+        `/reviews/${id}/moderate`,
+        { status: newStatus, isApproved: newStatus === 'APPROVED' },
+        {},
+        true
+      )
+    } catch (err) {
+      console.error('Failed to update review moderation status', err)
+      fetchReviews()
+    }
   }
+
+  const handleDeleteReview = async (id: string) => {
+    if (!confirm('Are you sure you want to permanently delete this review?')) return
+    setReviews((prev) => prev.filter((r) => r.id !== id))
+    try {
+      await api.delete(`/reviews/${id}`, {}, true)
+    } catch (err) {
+      console.error('Failed to delete review', err)
+      fetchReviews()
+    }
+  }
+
+  const pendingCount = reviews.filter((r) => r.status === 'PENDING').length
+  const approvedCount = reviews.filter((r) => r.status === 'APPROVED').length
+  const rejectedCount = reviews.filter((r) => r.status === 'REJECTED').length
 
   const filteredReviews = reviews.filter((r) => {
     const matchesStatus = statusFilter === 'ALL' || r.status === statusFilter
@@ -91,26 +121,31 @@ export function ReviewsView() {
             Product Reviews & Tactile Feedback
           </h2>
           <p className="text-xs adm-text-muted mt-0.5">
-            Customer star ratings, tactile appraisal, and moderation verification.
+            Customer star ratings, tactile appraisal, and moderation verification. All new reviews start in Pending.
           </p>
         </div>
       </div>
 
       {/* Filter and Search Bar */}
       <div className="adm-card border adm-border rounded-2xl p-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          {['ALL', 'PENDING', 'APPROVED', 'REJECTED'].map((st) => (
+        <div className="flex flex-wrap items-center gap-2">
+          {[
+            { id: 'ALL', label: `All Reviews (${reviews.length})` },
+            { id: 'PENDING', label: `Pending (${pendingCount})` },
+            { id: 'APPROVED', label: `Approved (${approvedCount})` },
+            { id: 'REJECTED', label: `Rejected (${rejectedCount})` },
+          ].map((tab) => (
             <button
-              key={st}
+              key={tab.id}
               type="button"
-              onClick={() => setStatusFilter(st)}
+              onClick={() => setStatusFilter(tab.id)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                statusFilter === st
+                statusFilter === tab.id
                   ? 'tab-active bg-[#424a70] !text-white [&_*]:!text-white shadow-sm'
                   : 'adm-text-muted hover:adm-text-primary hover:bg-black/5 dark:hover:bg-white/5'
               }`}
             >
-              {st === 'ALL' ? 'All Reviews' : st}
+              {tab.label}
             </button>
           ))}
         </div>
@@ -184,13 +219,14 @@ export function ReviewsView() {
                     </span>
                   </td>
                   <td className="py-3.5 px-4 text-right">
-                    {/* If status is PENDING, keep direct Approve and Reject buttons */}
+                    {/* If status is PENDING, show direct Approve and Reject buttons */}
                     {rev.status === 'PENDING' ? (
                       <div className="flex items-center justify-end gap-1.5">
                         <button
                           type="button"
                           onClick={() => handleModerate(rev.id, 'APPROVED')}
                           className="px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 text-xs font-medium inline-flex items-center gap-1 cursor-pointer transition-colors"
+                          title="Approve Review"
                         >
                           <CheckCircle2 className="w-3.5 h-3.5" />
                           <span>Approve</span>
@@ -199,9 +235,18 @@ export function ReviewsView() {
                           type="button"
                           onClick={() => handleModerate(rev.id, 'REJECTED')}
                           className="px-2.5 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/20 text-xs font-medium inline-flex items-center gap-1 cursor-pointer transition-colors"
+                          title="Reject Review (Hides from storefront)"
                         >
                           <XCircle className="w-3.5 h-3.5" />
                           <span>Reject</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteReview(rev.id)}
+                          className="p-1.5 rounded-lg text-red-500/60 hover:text-red-600 hover:bg-red-500/10 transition-colors cursor-pointer"
+                          title="Delete Review"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     ) : modifyingReviewId === rev.id ? (
@@ -233,6 +278,19 @@ export function ReviewsView() {
                             <span>Reject</span>
                           </button>
                         )}
+                        {rev.status !== 'PENDING' && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              await handleModerate(rev.id, 'PENDING')
+                              setModifyingReviewId(null)
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/20 text-xs font-medium inline-flex items-center gap-1 cursor-pointer transition-colors"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            <span>Set Pending</span>
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => setModifyingReviewId(null)}
@@ -243,8 +301,8 @@ export function ReviewsView() {
                         </button>
                       </div>
                     ) : (
-                      /* If already approved or rejected, show Modify button */
-                      <div className="flex items-center justify-end">
+                      /* If already approved or rejected, show Modify & Delete */
+                      <div className="flex items-center justify-end gap-1.5">
                         <button
                           type="button"
                           onClick={() => setModifyingReviewId(rev.id)}
@@ -252,6 +310,14 @@ export function ReviewsView() {
                         >
                           <Edit3 className="w-3 h-3 text-[#424a70] dark:text-indigo-400" />
                           <span>Modify</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteReview(rev.id)}
+                          className="p-1.5 rounded-lg text-red-500/60 hover:text-red-600 hover:bg-red-500/10 transition-colors cursor-pointer"
+                          title="Delete Review"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     )}
