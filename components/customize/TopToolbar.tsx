@@ -188,6 +188,17 @@ export function TopToolbar({
           <span className="hidden sm:inline">Save</span>
         </UnifortButton>
 
+        {/* Browse Saved Designs */}
+        <UnifortButton
+          variant="outline"
+          size="xs"
+          icon={<FolderOpen className="w-3.5 h-3.5 text-[#424a70]" />}
+          onClick={onOpenSavedDesigns}
+          title="Browse Saved Designs"
+        >
+          <span className="hidden sm:inline">Saved</span>
+        </UnifortButton>
+
         {/* Export Dropdown */}
         <div className="relative">
           <UnifortButton

@@ -60,21 +60,66 @@ export function CustomizeCatalog({
       </div>
 
       {/* Filter and Search Bar with Glassmorphism */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 p-4 rounded-3xl bg-white/75 backdrop-blur-2xl border border-white/90 shadow-[0_16px_40px_-8px_rgba(66,74,112,0.08),inset_0_1px_1px_rgba(255,255,255,0.95)]">
-        {/* Search */}
-        <div className="relative flex-1 max-w-md">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#687194]" />
-          <input
-            type="text"
-            placeholder="Search customizable tableware, mugs, carafes..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 text-xs bg-white border border-[rgba(66,74,112,0.18)] rounded-full focus:outline-none focus:border-[#424a70] shadow-2xs"
-          />
+      <div className="flex flex-col gap-3.5 p-4 sm:p-5 rounded-3xl bg-white/75 backdrop-blur-2xl border border-white/90 shadow-[0_16px_40px_-8px_rgba(66,74,112,0.08),inset_0_1px_1px_rgba(255,255,255,0.95)]">
+        {/* Top Controls: Search Input + Actions (Saved & Sort) */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          {/* Search: Generous width, robust and never shrinks */}
+          <div className="relative w-full sm:w-80 md:w-96 min-w-[240px]">
+            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#687194]" />
+            <input
+              type="text"
+              placeholder="Search customizable tableware, mugs, carafes..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 text-xs bg-white border border-[rgba(66,74,112,0.18)] rounded-full focus:outline-none focus:border-[#424a70] shadow-2xs"
+            />
+          </div>
+
+          {/* Actions: Saved Designs & Sort Select */}
+          <div className="flex items-center gap-2.5 shrink-0 flex-wrap justify-between sm:justify-end">
+            {onOpenSavedDesigns && (
+              <UnifortButton
+                variant="outline"
+                size="xs"
+                rounded="full"
+                icon={<FolderOpen className="w-3.5 h-3.5 text-[#424a70]" />}
+                onClick={onOpenSavedDesigns}
+                title="Browse your saved designs"
+              >
+                <span>Saved</span>
+                {savedCount > 0 ? (
+                  <span
+                    data-badge="true"
+                    className="ml-1.5 px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-[#424a70] !text-white leading-none inline-flex items-center justify-center min-w-[18px]"
+                    style={{ color: '#ffffff' }}
+                  >
+                    {savedCount}
+                  </span>
+                ) : null}
+              </UnifortButton>
+            )}
+
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-[#687194] hidden sm:inline font-medium">Sort:</span>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+                className="text-xs font-semibold px-3 py-1.5 bg-white border border-[rgba(66,74,112,0.18)] rounded-full focus:outline-none focus:border-[#424a70] text-[#1c2033] shadow-2xs cursor-pointer"
+              >
+                <option value="featured">Featured Pieces</option>
+                <option value="price-asc">Price: Low to High</option>
+                <option value="price-desc">Price: High to Low</option>
+                <option value="name">Alphabetical</option>
+              </select>
+            </div>
+          </div>
         </div>
 
-        {/* Category Pills */}
-        <div className="flex gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
+        {/* Divider */}
+        <div className="h-px bg-[rgba(66,74,112,0.08)] w-full" />
+
+        {/* Category Pills: Smooth horizontal swipe on mobile, wraps cleanly on desktop so no pills are ever cut */}
+        <div className="flex gap-2 overflow-x-auto sm:flex-wrap pb-1 sm:pb-0 scrollbar-none items-center">
           {categories.map((cat) => (
             <UnifortButton
               key={cat}
@@ -87,41 +132,6 @@ export function CustomizeCatalog({
               {cat}
             </UnifortButton>
           ))}
-        </div>
-
-        {/* Actions: Saved Designs & Sort Select */}
-        <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
-          {onOpenSavedDesigns && (
-            <UnifortButton
-              variant="outline"
-              size="xs"
-              rounded="full"
-              icon={<FolderOpen className="w-3.5 h-3.5 text-[#424a70]" />}
-              onClick={onOpenSavedDesigns}
-              title="Browse your saved designs"
-            >
-              <span>Saved</span>
-              {savedCount > 0 ? (
-                <span className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-[#424a70] text-white">
-                  {savedCount}
-                </span>
-              ) : null}
-            </UnifortButton>
-          )}
-
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-[#687194] hidden sm:inline font-medium">Sort:</span>
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as any)}
-              className="text-xs font-semibold px-3 py-1.5 bg-white border border-[rgba(66,74,112,0.18)] rounded-full focus:outline-none focus:border-[#424a70] text-[#1c2033] shadow-2xs"
-            >
-              <option value="featured">Featured Pieces</option>
-              <option value="price-asc">Price: Low to High</option>
-              <option value="price-desc">Price: High to Low</option>
-              <option value="name">Alphabetical</option>
-            </select>
-          </div>
         </div>
       </div>
 

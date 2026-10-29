@@ -83,6 +83,12 @@ export function ProductsProvider({ children }: { children: React.ReactNode }) {
         api.get<any[]>('/categories', undefined, false),
       ])
 
+      // Merge categories from categories API and categories from published products
+      const apiCats: string[] =
+        catRes.success && Array.isArray(catRes.data)
+          ? catRes.data.map((c: any) => c.name).filter(Boolean)
+          : []
+
       if (prodRes.success && Array.isArray(prodRes.data)) {
         // STRICT FILTER: Only PUBLISHED products can appear on storefront.
         // DRAFT and ARCHIVED products are strictly excluded from user view.
@@ -122,19 +128,19 @@ export function ProductsProvider({ children }: { children: React.ReactNode }) {
           setProducts(formatted)
         }
 
-        // Merge categories from categories API and categories from published products
-        const apiCats: string[] =
-          catRes.success && Array.isArray(catRes.data)
-            ? catRes.data.map((c: any) => c.name).filter(Boolean)
-            : []
         const productCats: string[] = publishedOnly
           .map((item: any) => item.category?.name || item.categoryName)
           .filter(Boolean)
 
         const uniqueCats = Array.from(new Set([...apiCats, ...productCats]))
-        setCategories(['All pieces', ...uniqueCats])
+        if (uniqueCats.length > 0) {
+          setCategories(['All pieces', ...uniqueCats])
+        }
         setError(null)
       } else {
+        if (apiCats.length > 0) {
+          setCategories(['All pieces', ...apiCats])
+        }
         setError(prodRes.message || 'Unable to fetch collection')
       }
     } catch (err: any) {
@@ -197,11 +203,15 @@ export function ProductsProvider({ children }: { children: React.ReactNode }) {
     return CUSTOMIZABLE_PRODUCTS
   }, [customizableProducts])
 
-  // Collection category pills
+  // Collection category pills (combines admin taxonomy collections and non-3D collection products)
   const collectionCategories = useMemo(() => {
-    const cats = Array.from(new Set(collectionProducts.map((p) => p.category).filter(Boolean)))
-    return ['All pieces', ...cats]
-  }, [collectionProducts])
+    const adminCatNames = categories.filter((c) => c !== 'All pieces' && c !== 'All')
+    const prodCatNames = collectionProducts.map((p) => p.category).filter(Boolean)
+    const set = new Set<string>()
+    for (const c of adminCatNames) set.add(c)
+    for (const c of prodCatNames) set.add(c)
+    return ['All pieces', ...Array.from(set)]
+  }, [categories, collectionProducts])
 
   // Customize page category pills (combines admin taxonomy collections and 3D customizable product categories)
   const customizeCategories = useMemo(() => {

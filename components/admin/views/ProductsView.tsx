@@ -32,6 +32,7 @@ export function ProductsView() {
   const [categories, setCategories] = useState<CategoryItem[]>([])
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<string>('ALL')
+  const [categoryFilter, setCategoryFilter] = useState<string>('ALL')
   const [customizableOnly, setCustomizableOnly] = useState<boolean>(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
@@ -373,11 +374,15 @@ export function ProductsView() {
   const filteredProducts = products.filter((p) => {
     const matchesStatus = statusFilter === 'ALL' || p.status === statusFilter
     const matchesCustom = !customizableOnly || p.isCustomizable
+    const matchesCategory =
+      categoryFilter === 'ALL' ||
+      p.categoryId === categoryFilter ||
+      (p.category?.name && p.category.name.toLowerCase() === categoryFilter.toLowerCase())
     const matchesSearch =
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (p.sku && p.sku.toLowerCase().includes(searchQuery.toLowerCase())) ||
       (p.slug && p.slug.toLowerCase().includes(searchQuery.toLowerCase()))
-    return matchesStatus && matchesCustom && matchesSearch
+    return matchesStatus && matchesCustom && matchesCategory && matchesSearch
   })
 
   return (
@@ -442,6 +447,25 @@ export function ProductsView() {
             <Sparkles className="w-3 h-3" />
             <span>3D Customizable Only</span>
           </button>
+
+          {categories.length > 0 && (
+            <>
+              <div className="h-4 w-px bg-black/10 dark:bg-white/10 mx-1 hidden sm:block" />
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="px-2.5 py-1.5 adm-input border rounded-lg text-xs font-medium focus:outline-none focus:border-[#424a70] transition-colors"
+                title="Filter by dynamic category"
+              >
+                <option value="ALL">All Categories</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
         </div>
 
         <div className="relative min-w-[240px]">

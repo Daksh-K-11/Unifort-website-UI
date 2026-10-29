@@ -108,24 +108,24 @@ export function UnifortButton({
   // Predefined variant styles with guaranteed high-contrast text
   const variantClasses = {
     primary:
-      '!bg-gradient-to-r !from-[#424a70] !to-[#2e3452] !text-white [&_*]:!text-white border border-white/20 shadow-[0_4px_16px_rgba(66,74,112,0.24)] hover:!bg-[#4f5987] hover:shadow-[0_8px_24px_rgba(66,74,112,0.32)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.985]',
+      '!bg-gradient-to-r !from-[#424a70] !to-[#2e3452] !text-white [&_*:not([data-badge])]:!text-white border border-white/20 shadow-[0_4px_16px_rgba(66,74,112,0.24)] hover:!bg-[#4f5987] hover:shadow-[0_8px_24px_rgba(66,74,112,0.32)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.985]',
     secondary:
-      '!bg-[#edf0f8] hover:!bg-[#e2e6f4] !text-[#1c2033] [&_*]:!text-[#1c2033] border border-[rgba(66,74,112,0.2)] shadow-2xs hover:shadow-xs active:scale-[0.985]',
+      '!bg-[#edf0f8] hover:!bg-[#e2e6f4] !text-[#1c2033] [&_*:not([data-badge])]:!text-[#1c2033] border border-[rgba(66,74,112,0.2)] shadow-2xs hover:shadow-xs active:scale-[0.985]',
     outline:
-      '!bg-white hover:!bg-[#f5f6fb] !text-[#1c2033] [&_*]:!text-[#1c2033] border border-[rgba(66,74,112,0.3)] hover:border-[#424a70] shadow-2xs hover:shadow-xs hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.985]',
+      '!bg-white hover:!bg-[#f5f6fb] !text-[#1c2033] [&_*:not([data-badge])]:!text-[#1c2033] border border-[rgba(66,74,112,0.3)] hover:border-[#424a70] shadow-2xs hover:shadow-xs hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.985]',
     ghost:
-      '!bg-transparent hover:!bg-[#424a70]/10 !text-[#1c2033] [&_*]:!text-[#1c2033] border border-transparent active:scale-[0.985]',
+      '!bg-transparent hover:!bg-[#424a70]/10 !text-[#1c2033] [&_*:not([data-badge])]:!text-[#1c2033] border border-transparent active:scale-[0.985]',
     danger:
-      '!bg-red-600 hover:!bg-red-700 !text-white [&_*]:!text-white border border-transparent shadow-xs hover:shadow-sm active:scale-[0.985]',
+      '!bg-red-600 hover:!bg-red-700 !text-white [&_*:not([data-badge])]:!text-white border border-transparent shadow-xs hover:shadow-sm active:scale-[0.985]',
     'danger-outline':
-      '!bg-white hover:!bg-red-50 !text-red-600 [&_*]:!text-red-600 border border-red-500/30 hover:border-red-500 shadow-2xs active:scale-[0.985]',
+      '!bg-white hover:!bg-red-50 !text-red-600 [&_*:not([data-badge])]:!text-red-600 border border-red-500/30 hover:border-red-500 shadow-2xs active:scale-[0.985]',
     tab: active
-      ? '!bg-[#424a70] !text-white [&_*]:!text-white font-semibold shadow-xs border border-transparent'
-      : '!bg-white/80 hover:!bg-white !text-[#1c2033] [&_*]:!text-[#1c2033] border border-[rgba(66,74,112,0.18)] hover:border-[#424a70]/40 shadow-2xs',
+      ? '!bg-[#424a70] !text-white [&_*:not([data-badge])]:!text-white font-semibold shadow-xs border border-transparent'
+      : '!bg-white/80 hover:!bg-white !text-[#1c2033] [&_*:not([data-badge])]:!text-[#1c2033] border border-[rgba(66,74,112,0.18)] hover:border-[#424a70]/40 shadow-2xs',
     glass:
-      '!bg-white/25 backdrop-blur-2xl !text-white [&_*]:!text-white border border-white/40 shadow-[0_8px_32px_rgba(0,0,0,0.25)] hover:!bg-white/35 active:scale-[0.985]',
+      '!bg-white/25 backdrop-blur-2xl !text-white [&_*:not([data-badge])]:!text-white border border-white/40 shadow-[0_8px_32px_rgba(0,0,0,0.25)] hover:!bg-white/35 active:scale-[0.985]',
     icon:
-      '!bg-white hover:!bg-[#f4f5fb] !text-[#1c2033] [&_*]:!text-[#1c2033] border border-[rgba(66,74,112,0.24)] hover:border-[#424a70] p-2 shadow-2xs hover:shadow-xs active:scale-[0.985]',
+      '!bg-white hover:!bg-[#f4f5fb] !text-[#1c2033] [&_*:not([data-badge])]:!text-[#1c2033] border border-[rgba(66,74,112,0.24)] hover:border-[#424a70] p-2 shadow-2xs hover:shadow-xs active:scale-[0.985]',
     custom: '',
   }[resolvedVariant]
 

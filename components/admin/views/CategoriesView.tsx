@@ -11,6 +11,7 @@ export function CategoriesView() {
 
   const [categories, setCategories] = useState<CategoryItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [filterTab, setFilterTab] = useState<'ALL' | 'ACTIVE' | 'EMPTY'>('ALL')
   const [searchQuery, setSearchQuery] = useState('')
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [name, setName] = useState('')
@@ -59,6 +60,9 @@ export function CategoriesView() {
       setName('')
       setSlug('')
       setDescription('')
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('unifort_products_updated'))
+      }
     }
   }
 
@@ -68,13 +72,26 @@ export function CategoriesView() {
     if (!confirmed) return
     setCategories((prev) => prev.filter((c) => c.id !== id))
     await api.delete(`/categories/${id}`, {}, true)
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('unifort_products_updated'))
+    }
   }
 
-  const filteredCategories = categories.filter(
-    (c) =>
+  const activeCount = categories.filter((c) => (c._count?.products || 0) > 0).length
+  const emptyCount = categories.filter((c) => (c._count?.products || 0) === 0).length
+
+  const filteredCategories = categories.filter((c) => {
+    const matchesSearch =
       c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.slug.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+      c.slug.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (c.description && c.description.toLowerCase().includes(searchQuery.toLowerCase()))
+    const count = c._count?.products || 0
+    const matchesTab =
+      filterTab === 'ALL' ||
+      (filterTab === 'ACTIVE' && count > 0) ||
+      (filterTab === 'EMPTY' && count === 0)
+    return matchesSearch && matchesTab
+  })
 
   return (
     <div className="space-y-6">
@@ -99,8 +116,44 @@ export function CategoriesView() {
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="adm-card border adm-border rounded-2xl p-4 flex items-center justify-between gap-3">
-        <div className="relative w-full max-w-sm">
+      <div className="adm-card border adm-border rounded-2xl p-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setFilterTab('ALL')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              filterTab === 'ALL'
+                ? 'tab-active bg-[#424a70] !text-white [&_*]:!text-white shadow-sm'
+                : 'adm-text-muted hover:adm-text-primary hover:bg-black/5 dark:hover:bg-white/5'
+            }`}
+          >
+            All Categories ({categories.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterTab('ACTIVE')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              filterTab === 'ACTIVE'
+                ? 'tab-active bg-[#424a70] !text-white [&_*]:!text-white shadow-sm'
+                : 'adm-text-muted hover:adm-text-primary hover:bg-black/5 dark:hover:bg-white/5'
+            }`}
+          >
+            With Pieces ({activeCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterTab('EMPTY')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              filterTab === 'EMPTY'
+                ? 'tab-active bg-[#424a70] !text-white [&_*]:!text-white shadow-sm'
+                : 'adm-text-muted hover:adm-text-primary hover:bg-black/5 dark:hover:bg-white/5'
+            }`}
+          >
+            Unassigned / Empty ({emptyCount})
+          </button>
+        </div>
+
+        <div className="relative w-full md:w-72">
           <Search className="w-3.5 h-3.5 adm-text-muted absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"

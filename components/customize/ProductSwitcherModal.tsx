@@ -75,7 +75,7 @@ export function ProductSwitcherModal({
               className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-[rgba(66,74,112,0.18)] rounded-lg focus:outline-none focus:border-[#424a70]"
             />
           </div>
-          <div className="flex gap-1.5 overflow-x-auto w-full sm:w-auto">
+          <div className="flex gap-1.5 overflow-x-auto sm:flex-wrap w-full sm:w-auto pb-0.5 sm:pb-0">
             {categories.map((cat) => (
               <UnifortButton
                 key={cat}
