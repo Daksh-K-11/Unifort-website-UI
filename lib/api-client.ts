@@ -8,6 +8,16 @@ export interface ApiResponse<T = any> {
   success: boolean
   message?: string
   data?: T
+  pagination?: {
+    page: number
+    limit: number
+    total: number
+    totalPages: number
+    hasNextPage?: boolean
+    hasPrevPage?: boolean
+    [key: string]: any
+  }
+  meta?: any
   errors?: Array<{ field?: string; message: string }>
   status: number
 }
@@ -115,6 +125,8 @@ export async function apiClient<T = any>(
       success: true,
       message: json?.message,
       data: json?.data !== undefined ? json.data : json,
+      pagination: json?.pagination || json?.meta,
+      meta: json?.meta,
       status: res.status,
     }
   } catch (error: any) {

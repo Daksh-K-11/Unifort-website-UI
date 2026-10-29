@@ -278,19 +278,6 @@ export function ReviewsView() {
                             <span>Reject</span>
                           </button>
                         )}
-                        {rev.status !== 'PENDING' && (
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              await handleModerate(rev.id, 'PENDING')
-                              setModifyingReviewId(null)
-                            }}
-                            className="px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/20 text-xs font-medium inline-flex items-center gap-1 cursor-pointer transition-colors"
-                          >
-                            <RotateCcw className="w-3.5 h-3.5" />
-                            <span>Set Pending</span>
-                          </button>
-                        )}
                         <button
                           type="button"
                           onClick={() => setModifyingReviewId(null)}

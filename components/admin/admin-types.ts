@@ -78,6 +78,7 @@ export interface CustomDesignItem {
     email: string
   }
   productId: string
+  modelType?: string
   product?: {
     name: string
     slug: string

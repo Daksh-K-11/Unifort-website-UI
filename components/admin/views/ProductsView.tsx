@@ -18,12 +18,15 @@ import {
   UploadCloud,
   Image as ImageIcon,
   FolderOpen,
+  RefreshCw,
+  Filter,
 } from 'lucide-react'
 import { useAdminAuth } from '../admin-auth-context'
 import { ProductItem, ItemStatus, ModelType, CategoryItem } from '../admin-types'
 import { api } from '../../../lib/api-client'
 import { GlassDropdown, GlassDropdownOption } from '../../ui/GlassDropdown'
 import { MediaLibraryView } from './MediaLibraryView'
+import { AdminPagination } from '../AdminPagination'
 
 export function ProductsView() {
   const { canDeleteProducts } = useAdminAuth()
@@ -33,8 +36,12 @@ export function ProductsView() {
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<string>('ALL')
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL')
-  const [customizableOnly, setCustomizableOnly] = useState<boolean>(false)
+  const [customFilter, setCustomFilter] = useState<string>('ALL')
+  const [stockFilter, setStockFilter] = useState<string>('ALL')
+  const [sortBy, setSortBy] = useState<string>('newest')
   const [searchQuery, setSearchQuery] = useState('')
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(20)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -371,19 +378,78 @@ export function ProductsView() {
     { value: 'coaster', label: 'Ceramic Coaster Set (1 surface)' },
   ]
 
-  const filteredProducts = products.filter((p) => {
-    const matchesStatus = statusFilter === 'ALL' || p.status === statusFilter
-    const matchesCustom = !customizableOnly || p.isCustomizable
-    const matchesCategory =
-      categoryFilter === 'ALL' ||
-      p.categoryId === categoryFilter ||
-      (p.category?.name && p.category.name.toLowerCase() === categoryFilter.toLowerCase())
-    const matchesSearch =
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (p.sku && p.sku.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (p.slug && p.slug.toLowerCase().includes(searchQuery.toLowerCase()))
-    return matchesStatus && matchesCustom && matchesCategory && matchesSearch
-  })
+  const filteredAndSortedProducts = useMemo(() => {
+    const list = products.filter((p) => {
+      const matchesStatus = statusFilter === 'ALL' || p.status === statusFilter
+      const matchesCategory =
+        categoryFilter === 'ALL' ||
+        p.categoryId === categoryFilter ||
+        (p.category?.name && p.category.name.toLowerCase() === categoryFilter.toLowerCase())
+      const matchesCustom =
+        customFilter === 'ALL' ||
+        (customFilter === 'CUSTOMIZABLE' ? p.isCustomizable : !p.isCustomizable)
+      const matchesStock =
+        stockFilter === 'ALL' ||
+        (stockFilter === 'IN_STOCK'
+          ? p.stock > 0
+          : stockFilter === 'LOW_STOCK'
+          ? p.stock > 0 && p.stock < 10
+          : p.stock <= 0)
+      const matchesSearch =
+        !searchQuery.trim() ||
+        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (p.sku && p.sku.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (p.slug && p.slug.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (p.category?.name && p.category.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (p.description && p.description.toLowerCase().includes(searchQuery.toLowerCase()))
+      return matchesStatus && matchesCategory && matchesCustom && matchesStock && matchesSearch
+    })
+
+    list.sort((a, b) => {
+      if (sortBy === 'price_asc') return a.price - b.price
+      if (sortBy === 'price_desc') return b.price - a.price
+      if (sortBy === 'name') return a.name.localeCompare(b.name)
+      if (sortBy === 'stock_asc') return a.stock - b.stock
+      if (sortBy === 'oldest') {
+        const da = a.createdAt ? new Date(a.createdAt).getTime() : 0
+        const db = b.createdAt ? new Date(b.createdAt).getTime() : 0
+        return da - db
+      }
+      // default: newest
+      const da = a.createdAt ? new Date(a.createdAt).getTime() : 0
+      const db = b.createdAt ? new Date(b.createdAt).getTime() : 0
+      return db - da
+    })
+
+    return list
+  }, [products, statusFilter, categoryFilter, customFilter, stockFilter, searchQuery, sortBy])
+
+  const totalProducts = filteredAndSortedProducts.length
+  const totalPages = Math.ceil(totalProducts / limit) || 1
+  const paginatedProducts = useMemo(() => {
+    const start = (page - 1) * limit
+    return filteredAndSortedProducts.slice(start, start + limit)
+  }, [filteredAndSortedProducts, page, limit])
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0
+    if (statusFilter !== 'ALL') count++
+    if (categoryFilter !== 'ALL') count++
+    if (customFilter !== 'ALL') count++
+    if (stockFilter !== 'ALL') count++
+    if (searchQuery.trim()) count++
+    return count
+  }, [statusFilter, categoryFilter, customFilter, stockFilter, searchQuery])
+
+  const handleResetFilters = () => {
+    setStatusFilter('ALL')
+    setCategoryFilter('ALL')
+    setCustomFilter('ALL')
+    setStockFilter('ALL')
+    setSortBy('newest')
+    setSearchQuery('')
+    setPage(1)
+  }
 
   return (
     <div className="space-y-6">
@@ -398,90 +464,268 @@ export function ProductsView() {
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => {
-            setErrorMessage(null)
-            setIsCreateModalOpen(true)
-          }}
-          className="px-4 py-2.5 adm-btn-primary rounded-xl text-xs flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>New Product / Draft</span>
-        </button>
-      </div>
-
-      {/* Filter and Search Bar */}
-      <div className="adm-card border adm-border rounded-2xl p-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          {['ALL', 'DRAFT', 'PUBLISHED', 'ARCHIVED'].map((tab) => {
-            const isActive = statusFilter === tab
-            return (
-              <button
-                key={tab}
-                type="button"
-                onClick={() => setStatusFilter(tab)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  isActive
-                    ? 'tab-active bg-[#424a70] !text-white [&_*]:!text-white shadow-sm'
-                    : 'adm-text-muted hover:adm-text-primary hover:bg-black/5 dark:hover:bg-white/5'
-                }`}
-              >
-                {tab === 'ALL' ? 'All Pieces' : tab}
-              </button>
-            )
-          })}
-
-          <div className="h-4 w-px bg-black/10 dark:bg-white/10 mx-1 hidden sm:block" />
-
-          {/* Customizable Toggle */}
+        <div className="flex items-center gap-2 self-start sm:self-auto">
           <button
             type="button"
-            onClick={() => setCustomizableOnly(!customizableOnly)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 border transition-all ${
-              customizableOnly
-                ? 'tab-active bg-[#424a70] border-[#424a70] !text-white [&_*]:!text-white shadow-sm'
-                : 'adm-border adm-text-muted hover:adm-text-primary'
-            }`}
+            onClick={fetchCatalogData}
+            disabled={loading}
+            className="px-3.5 py-2.5 rounded-xl text-xs font-medium adm-card border adm-border adm-text-primary hover:bg-[#424a70]/10 flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
+            title="Refresh catalog"
           >
-            <Sparkles className="w-3 h-3" />
-            <span>3D Customizable Only</span>
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
           </button>
+          <button
+            type="button"
+            onClick={() => {
+              setErrorMessage(null)
+              setIsCreateModalOpen(true)
+            }}
+            className="px-4 py-2.5 adm-btn-primary rounded-xl text-xs flex items-center gap-1.5 cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>New Product / Draft</span>
+          </button>
+        </div>
+      </div>
 
-          {categories.length > 0 && (
-            <>
-              <div className="h-4 w-px bg-black/10 dark:bg-white/10 mx-1 hidden sm:block" />
-              <select
-                value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
-                className="px-2.5 py-1.5 adm-input border rounded-lg text-xs font-medium focus:outline-none focus:border-[#424a70] transition-colors"
-                title="Filter by dynamic category"
+      {/* Modern Filter Toolbar */}
+      <div className="adm-card border adm-border rounded-2xl p-4 shadow-sm space-y-3.5">
+        {/* Row 1: Search + Status + Category + 3D Studio */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+          {/* Keyword Search */}
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 adm-text-muted absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value)
+                setPage(1)
+              }}
+              placeholder="Search piece name, SKU, slug..."
+              className="w-full pl-9 pr-8 py-2 adm-input border rounded-xl text-xs adm-text-primary focus:outline-none focus:border-[#424a70] transition-colors"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery('')
+                  setPage(1)
+                }}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
               >
-                <option value="ALL">All Categories</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Status Dropdown */}
+          <div className="relative">
+            <select
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value)
+                setPage(1)
+              }}
+              className="w-full px-3 py-2 adm-input border rounded-xl text-xs adm-text-primary focus:outline-none focus:border-[#424a70] transition-colors appearance-none cursor-pointer"
+            >
+              <option value="ALL">All Statuses</option>
+              <option value="DRAFT">DRAFT (Drafting State)</option>
+              <option value="PUBLISHED">PUBLISHED (Live in Store)</option>
+              <option value="ARCHIVED">ARCHIVED (Decommissioned)</option>
+            </select>
+            <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs adm-text-muted">
+              ▼
+            </div>
+          </div>
+
+          {/* Dynamic Category Dropdown */}
+          <div className="relative">
+            <select
+              value={categoryFilter}
+              onChange={(e) => {
+                setCategoryFilter(e.target.value)
+                setPage(1)
+              }}
+              className="w-full px-3 py-2 adm-input border rounded-xl text-xs adm-text-primary focus:outline-none focus:border-[#424a70] transition-colors appearance-none cursor-pointer"
+            >
+              <option value="ALL">All Categories</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs adm-text-muted">
+              ▼
+            </div>
+          </div>
+
+          {/* 3D Studio Customization Dropdown */}
+          <div className="relative">
+            <select
+              value={customFilter}
+              onChange={(e) => {
+                setCustomFilter(e.target.value)
+                setPage(1)
+              }}
+              className="w-full px-3 py-2 adm-input border rounded-xl text-xs adm-text-primary focus:outline-none focus:border-[#424a70] transition-colors appearance-none cursor-pointer"
+            >
+              <option value="ALL">All Pieces (3D + Standard)</option>
+              <option value="CUSTOMIZABLE">3D Studio Customizable Only</option>
+              <option value="STANDARD">Standard Tableware Only</option>
+            </select>
+            <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs adm-text-muted">
+              ▼
+            </div>
+          </div>
+        </div>
+
+        {/* Row 2: Stock Status + Sort Order + Active Filter Badges */}
+        <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2 border-t adm-border">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Stock Status Dropdown */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] adm-text-muted font-medium">Stock:</span>
+              <select
+                value={stockFilter}
+                onChange={(e) => {
+                  setStockFilter(e.target.value)
+                  setPage(1)
+                }}
+                className="px-2.5 py-1.5 adm-input border rounded-lg text-xs adm-text-primary focus:outline-none focus:border-[#424a70] cursor-pointer"
+              >
+                <option value="ALL">All Stock Levels</option>
+                <option value="IN_STOCK">In Stock (&gt; 0)</option>
+                <option value="LOW_STOCK">Low Stock (&lt; 10)</option>
+                <option value="OUT_OF_STOCK">Out of Stock (0)</option>
               </select>
-            </>
+            </div>
+
+            {/* Sort Order Dropdown */}
+            <div className="flex items-center gap-1.5 border-l adm-border pl-2.5">
+              <span className="text-[11px] adm-text-muted font-medium">Sort:</span>
+              <select
+                value={sortBy}
+                onChange={(e) => {
+                  setSortBy(e.target.value)
+                  setPage(1)
+                }}
+                className="px-2.5 py-1.5 adm-input border rounded-lg text-xs adm-text-primary focus:outline-none focus:border-[#424a70] cursor-pointer"
+              >
+                <option value="newest">Newest First</option>
+                <option value="oldest">Oldest First</option>
+                <option value="price_asc">Price: Low to High</option>
+                <option value="price_desc">Price: High to Low</option>
+                <option value="name">Name: A to Z</option>
+                <option value="stock_asc">Stock: Low to High</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Active Filter Counter & Reset */}
+          {activeFilterCount > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-[#424a70] dark:text-indigo-400 font-medium">
+                {activeFilterCount} filter{activeFilterCount > 1 ? 's' : ''} applied
+              </span>
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="px-2.5 py-1 text-xs rounded-lg border border-red-500/20 text-red-600 dark:text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-1 cursor-pointer"
+              >
+                <X className="w-3 h-3" />
+                <span>Clear all</span>
+              </button>
+            </div>
           )}
         </div>
 
-        <div className="relative min-w-[240px]">
-          <Search className="w-3.5 h-3.5 adm-text-muted absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search piece name, SKU, slug..."
-            className="w-full pl-9 pr-3 py-1.5 adm-input border rounded-xl text-xs focus:outline-none focus:border-[#424a70] transition-colors"
-          />
-        </div>
+        {/* Active Filter Badges */}
+        {activeFilterCount > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+            {statusFilter !== 'ALL' && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-[#424a70]/10 text-[#424a70] dark:text-[#a0aadb] border border-[#424a70]/20">
+                Status: {statusFilter}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStatusFilter('ALL')
+                    setPage(1)
+                  }}
+                  className="hover:text-red-500"
+                >
+                  <X className="w-2.5 h-2.5" />
+                </button>
+              </span>
+            )}
+            {categoryFilter !== 'ALL' && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                Category: {categories.find((c) => c.id === categoryFilter)?.name || categoryFilter}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCategoryFilter('ALL')
+                    setPage(1)
+                  }}
+                  className="hover:text-red-500"
+                >
+                  <X className="w-2.5 h-2.5" />
+                </button>
+              </span>
+            )}
+            {customFilter !== 'ALL' && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-purple-500/15 text-purple-700 dark:text-purple-300 border border-purple-500/30">
+                Studio: {customFilter === 'CUSTOMIZABLE' ? '3D Customizable' : 'Standard'}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCustomFilter('ALL')
+                    setPage(1)
+                  }}
+                  className="hover:text-red-500"
+                >
+                  <X className="w-2.5 h-2.5" />
+                </button>
+              </span>
+            )}
+            {stockFilter !== 'ALL' && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+                Stock: {stockFilter.replace(/_/g, ' ')}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStockFilter('ALL')
+                    setPage(1)
+                  }}
+                  className="hover:text-red-500"
+                >
+                  <X className="w-2.5 h-2.5" />
+                </button>
+              </span>
+            )}
+            {searchQuery && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30">
+                Search: &quot;{searchQuery}&quot;
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('')
+                    setPage(1)
+                  }}
+                  className="hover:text-red-500"
+                >
+                  <X className="w-2.5 h-2.5" />
+                </button>
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Products Table or Empty State */}
-      {filteredProducts.length === 0 ? (
+      {filteredAndSortedProducts.length === 0 ? (
         <div className="p-12 rounded-2xl adm-card border adm-border flex flex-col items-center justify-center text-center">
           <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mb-3">
             <Box className="w-6 h-6 text-amber-500 dark:text-amber-400" />
@@ -522,7 +766,7 @@ export function ProductsView() {
               </tr>
             </thead>
             <tbody className="divide-y adm-border text-xs adm-text-secondary">
-              {filteredProducts.map((prod) => (
+              {paginatedProducts.map((prod) => (
                 <tr key={prod.id} className="adm-table-hover transition-colors">
                   <td className="py-2.5 px-4 w-14">
                     <div
@@ -615,6 +859,20 @@ export function ProductsView() {
               ))}
             </tbody>
           </table>
+
+          {/* Reusable Pagination */}
+          <AdminPagination
+            page={page}
+            limit={limit}
+            total={totalProducts}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            onLimitChange={(l) => {
+              setLimit(l)
+              setPage(1)
+            }}
+            itemName="pieces"
+          />
         </div>
       )}
 
