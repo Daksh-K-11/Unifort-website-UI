@@ -15,6 +15,7 @@ import { InquiriesView } from '@/components/admin/views/InquiriesView'
 import { ReviewsView } from '@/components/admin/views/ReviewsView'
 import { UsersView } from '@/components/admin/views/UsersView'
 import { AuditLogsView } from '@/components/admin/views/AuditLogsView'
+import { MediaLibraryView } from '@/components/admin/views/MediaLibraryView'
 import { AdminSection } from '@/components/admin/admin-types'
 
 function AdminDashboardContent() {
@@ -40,6 +41,8 @@ function AdminDashboardContent() {
         return <ProductsView />
       case 'categories':
         return <CategoriesView />
+      case 'media':
+        return <MediaLibraryView />
       case 'inquiries':
         return <InquiriesView />
       case 'reviews':

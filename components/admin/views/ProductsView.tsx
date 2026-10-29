@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import Image from 'next/image'
 import {
   Box,
   Plus,
@@ -14,11 +15,15 @@ import {
   Save,
   AlertTriangle,
   Loader2,
+  UploadCloud,
+  Image as ImageIcon,
+  FolderOpen,
 } from 'lucide-react'
 import { useAdminAuth } from '../admin-auth-context'
 import { ProductItem, ItemStatus, ModelType, CategoryItem } from '../admin-types'
 import { api } from '../../../lib/api-client'
 import { GlassDropdown, GlassDropdownOption } from '../../ui/GlassDropdown'
+import { MediaLibraryView } from './MediaLibraryView'
 
 export function ProductsView() {
   const { canDeleteProducts } = useAdminAuth()
@@ -43,6 +48,7 @@ export function ProductsView() {
   const [formStatus, setFormStatus] = useState<ItemStatus>('DRAFT')
   const [formIsCustomizable, setFormIsCustomizable] = useState(false)
   const [formModelType, setFormModelType] = useState<ModelType>('mug')
+  const [formImage, setFormImage] = useState('/products/unifort-plate-light.jpg')
 
   // Edit product form state
   const [editingProduct, setEditingProduct] = useState<ProductItem | null>(null)
@@ -56,7 +62,45 @@ export function ProductsView() {
   const [editIsCustomizable, setEditIsCustomizable] = useState(false)
   const [editModelType, setEditModelType] = useState<ModelType>('mug')
   const [editDescription, setEditDescription] = useState('')
+  const [editImage, setEditImage] = useState('/products/unifort-plate-light.jpg')
   const [editErrorMessage, setEditErrorMessage] = useState<string | null>(null)
+
+  // Asset picker state
+  const [isAssetPickerOpen, setIsAssetPickerOpen] = useState(false)
+  const [assetPickerTarget, setAssetPickerTarget] = useState<'create' | 'edit'>('create')
+  const [isUploadingImage, setIsUploadingImage] = useState(false)
+  const createFileInputRef = useRef<HTMLInputElement>(null)
+  const editFileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleUploadProductImage = async (file: File, target: 'create' | 'edit') => {
+    if (!file) return
+    setIsUploadingImage(true)
+    try {
+      const reader = new FileReader()
+      reader.onload = async () => {
+        const base64Data = reader.result as string
+        const res = await api.post(
+          '/media/upload',
+          { data: base64Data, filename: file.name, category: 'product' },
+          {},
+          true
+        )
+        if (res.success && res.data?.url) {
+          if (target === 'create') {
+            setFormImage(res.data.url)
+          } else {
+            setEditImage(res.data.url)
+          }
+        } else {
+          alert(res.message || 'Image upload failed')
+        }
+        setIsUploadingImage(false)
+      }
+      reader.readAsDataURL(file)
+    } catch {
+      setIsUploadingImage(false)
+    }
+  }
 
   const fetchCatalogData = useCallback(async () => {
     setLoading(true)
@@ -83,7 +127,7 @@ export function ProductsView() {
             category: p.category
               ? { id: p.category.id, name: p.category.name, slug: p.category.slug }
               : undefined,
-            images: p.images || [p.image || '/unifort-plate-light.jpg'],
+            images: p.images || [p.image || '/products/unifort-plate-light.jpg'],
             createdAt: p.createdAt,
             updatedAt: p.updatedAt,
           }))
@@ -135,7 +179,8 @@ export function ProductsView() {
       categoryId: chosenCatObj?.id,
       categoryName: chosenCatObj?.name || 'Tableware',
       type: 'Ceramic Stoneware',
-      image: '/unifort-plate-light.jpg',
+      image: formImage || '/products/unifort-plate-light.jpg',
+      gallery: [formImage || '/products/unifort-plate-light.jpg'],
       description: `${formName} handcrafted by UNIFORT artisans with mineral glazes and tactile surfaces.`,
     }
 
@@ -171,6 +216,7 @@ export function ProductsView() {
       setFormStock('25')
       setFormStatus('DRAFT')
       setFormIsCustomizable(false)
+      notifyProductChange()
     } else {
       const errMsg =
         res.message ||
@@ -194,7 +240,21 @@ export function ProductsView() {
     setEditIsCustomizable(p.isCustomizable)
     setEditModelType((p.modelType as ModelType) || 'mug')
     setEditDescription(p.description || '')
+    setEditImage(p.images?.[0] || '/products/unifort-plate-light.jpg')
     setEditErrorMessage(null)
+  }
+
+  const notifyProductChange = () => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('unifort_products_updated'))
+      try {
+        if ('BroadcastChannel' in window) {
+          const channel = new BroadcastChannel('unifort_product_sync')
+          channel.postMessage({ type: 'PRODUCTS_CHANGED' })
+          channel.close()
+        }
+      } catch {}
+    }
   }
 
   const handleUpdateProduct = async (e: React.FormEvent) => {
@@ -218,6 +278,8 @@ export function ProductsView() {
       categoryId: chosenCatObj?.id,
       categoryName: chosenCatObj?.name,
       description: editDescription,
+      image: editImage || '/products/unifort-plate-light.jpg',
+      gallery: [editImage || '/products/unifort-plate-light.jpg'],
     }
 
     const res = await api.put(`/products/${editingProduct.id}`, payload, {}, true)
@@ -242,11 +304,13 @@ export function ProductsView() {
                   ? { id: updated.category.id, name: updated.category.name, slug: updated.category.slug }
                   : undefined,
                 description: updated.description,
+                images: [updated.image || editImage || '/products/unifort-plate-light.jpg'],
               }
             : item
         )
       )
       setEditingProduct(null)
+      notifyProductChange()
     } else {
       const errMsg =
         res.message ||
@@ -262,6 +326,7 @@ export function ProductsView() {
     const next: ItemStatus = current === 'DRAFT' ? 'PUBLISHED' : current === 'PUBLISHED' ? 'ARCHIVED' : 'DRAFT'
     setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, status: next } : p)))
     await api.patch(`/products/${id}/status`, { status: next }, {}, true)
+    notifyProductChange()
   }
 
   const handleDeleteProduct = async (id: string) => {
@@ -270,6 +335,7 @@ export function ProductsView() {
     if (!confirmed) return
     setProducts((prev) => prev.filter((p) => p.id !== id))
     await api.delete(`/products/${id}`, {}, true)
+    notifyProductChange()
   }
 
   // Dropdown options
@@ -421,7 +487,8 @@ export function ProductsView() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b adm-border adm-table-head text-[10px] uppercase tracking-wider adm-text-muted font-medium">
-                <th className="py-3 px-4">Product Name</th>
+                <th className="py-3 px-4 w-14">Image</th>
+                <th className="py-3 px-4">Product Name & Category</th>
                 <th className="py-3 px-4">SKU & Slug</th>
                 <th className="py-3 px-4">Price</th>
                 <th className="py-3 px-4">Stock</th>
@@ -433,8 +500,26 @@ export function ProductsView() {
             <tbody className="divide-y adm-border text-xs adm-text-secondary">
               {filteredProducts.map((prod) => (
                 <tr key={prod.id} className="adm-table-hover transition-colors">
-                  <td className="py-3.5 px-4 font-medium adm-text-primary">
-                    {prod.name}
+                  <td className="py-2.5 px-4 w-14">
+                    <div
+                      onClick={() => openEditModal(prod)}
+                      className="relative w-11 h-11 rounded-xl overflow-hidden border adm-border bg-black/5 dark:bg-white/5 shrink-0 group cursor-pointer shadow-2xs hover:border-[#424a70] hover:scale-105 transition-all"
+                      title="Click to view/change image asset"
+                    >
+                      <Image
+                        src={prod.images?.[0] || '/products/unifort-plate-light.jpg'}
+                        alt={prod.name}
+                        fill
+                        sizes="44px"
+                        className="object-cover"
+                      />
+                    </div>
+                  </td>
+                  <td className="py-2.5 px-4 font-medium adm-text-primary">
+                    <div className="flex flex-col">
+                      <span className="font-semibold">{prod.name}</span>
+                      <span className="text-[10px] adm-text-muted">{prod.category?.name || 'Tableware'}</span>
+                    </div>
                   </td>
                   <td className="py-3.5 px-4">
                     <div className="flex flex-col">
@@ -626,6 +711,69 @@ export function ProductsView() {
                 />
               </div>
 
+              {/* Media Asset & Image Upload */}
+              <div className="p-3.5 rounded-2xl bg-white/50 dark:bg-white/[0.03] border adm-border space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] uppercase tracking-wider adm-text-muted font-medium">
+                    Product Media Image *
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAssetPickerTarget('create')
+                      setIsAssetPickerOpen(true)
+                    }}
+                    className="text-xs text-[#424a70] dark:text-[#a5b4fc] font-medium flex items-center gap-1 hover:underline cursor-pointer"
+                  >
+                    <FolderOpen className="w-3.5 h-3.5" />
+                    <span>Choose from Assets</span>
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="relative w-16 h-16 rounded-xl overflow-hidden border adm-border bg-black/5 dark:bg-white/5 shrink-0">
+                    <Image
+                      src={formImage || '/products/unifort-plate-light.jpg'}
+                      alt="Product preview"
+                      fill
+                      className="object-cover"
+                    />
+                  </div>
+
+                  <div className="flex-1 space-y-1.5">
+                    <input
+                      type="file"
+                      ref={createFileInputRef}
+                      className="hidden"
+                      accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                      onChange={(e) => {
+                        if (e.target.files?.[0]) {
+                          handleUploadProductImage(e.target.files[0], 'create')
+                        }
+                      }}
+                    />
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => createFileInputRef.current?.click()}
+                        disabled={isUploadingImage}
+                        className="px-3 py-1.5 rounded-xl border adm-border bg-white/80 dark:bg-white/10 hover:bg-white text-xs adm-text-primary flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+                      >
+                        <UploadCloud className="w-3.5 h-3.5 text-[#424a70] dark:text-[#a5b4fc]" />
+                        <span>{isUploadingImage ? 'Uploading...' : 'Upload Image'}</span>
+                      </button>
+                    </div>
+                    <input
+                      type="text"
+                      value={formImage}
+                      onChange={(e) => setFormImage(e.target.value)}
+                      placeholder="/assets/image.jpg"
+                      className="w-full px-3 py-1.5 adm-input border rounded-lg text-xs font-mono focus:outline-none focus:border-[#424a70]"
+                    />
+                  </div>
+                </div>
+              </div>
+
               {errorMessage && (
                 <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-red-500 flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4 shrink-0 text-red-500" />
@@ -811,6 +959,69 @@ export function ProductsView() {
                 />
               </div>
 
+              {/* Media Asset & Image Upload */}
+              <div className="p-3.5 rounded-2xl bg-white/50 dark:bg-white/[0.03] border adm-border space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] uppercase tracking-wider adm-text-muted font-medium">
+                    Product Media Image *
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAssetPickerTarget('edit')
+                      setIsAssetPickerOpen(true)
+                    }}
+                    className="text-xs text-[#424a70] dark:text-[#a5b4fc] font-medium flex items-center gap-1 hover:underline cursor-pointer"
+                  >
+                    <FolderOpen className="w-3.5 h-3.5" />
+                    <span>Choose from Assets</span>
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="relative w-16 h-16 rounded-xl overflow-hidden border adm-border bg-black/5 dark:bg-white/5 shrink-0">
+                    <Image
+                      src={editImage || '/products/unifort-plate-light.jpg'}
+                      alt="Product preview"
+                      fill
+                      className="object-cover"
+                    />
+                  </div>
+
+                  <div className="flex-1 space-y-1.5">
+                    <input
+                      type="file"
+                      ref={editFileInputRef}
+                      className="hidden"
+                      accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                      onChange={(e) => {
+                        if (e.target.files?.[0]) {
+                          handleUploadProductImage(e.target.files[0], 'edit')
+                        }
+                      }}
+                    />
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => editFileInputRef.current?.click()}
+                        disabled={isUploadingImage}
+                        className="px-3 py-1.5 rounded-xl border adm-border bg-white/80 dark:bg-white/10 hover:bg-white text-xs adm-text-primary flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+                      >
+                        <UploadCloud className="w-3.5 h-3.5 text-[#424a70] dark:text-[#a5b4fc]" />
+                        <span>{isUploadingImage ? 'Uploading...' : 'Upload Image'}</span>
+                      </button>
+                    </div>
+                    <input
+                      type="text"
+                      value={editImage}
+                      onChange={(e) => setEditImage(e.target.value)}
+                      placeholder="/assets/image.jpg"
+                      className="w-full px-3 py-1.5 adm-input border rounded-lg text-xs font-mono focus:outline-none focus:border-[#424a70]"
+                    />
+                  </div>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-[11px] uppercase tracking-wider adm-text-muted font-medium mb-1.5">
                   Artisanal Piece Description
@@ -888,6 +1099,43 @@ export function ProductsView() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Asset Picker Modal Dialog */}
+      {isAssetPickerOpen && (
+        <div className="fixed inset-0 adm-modal-overlay backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-4xl adm-modal-bg border rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-5 border-b adm-border flex items-center justify-between">
+              <div>
+                <span className="text-[10px] uppercase tracking-wider text-[#424a70] dark:text-indigo-400 font-semibold">
+                  Atelier Media Assets
+                </span>
+                <h3 className="text-base font-serif font-medium adm-text-primary">
+                  Select Product Image from Public Assets
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAssetPickerOpen(false)}
+                className="p-1.5 rounded-lg adm-text-muted hover:adm-text-primary cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto flex-1">
+              <MediaLibraryView
+                isPickerMode
+                onSelectAsset={(url) => {
+                  if (assetPickerTarget === 'create') {
+                    setFormImage(url)
+                  } else {
+                    setEditImage(url)
+                  }
+                  setIsAssetPickerOpen(false)
+                }}
+              />
+            </div>
           </div>
         </div>
       )}

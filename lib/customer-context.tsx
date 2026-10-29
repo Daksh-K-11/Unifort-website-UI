@@ -67,23 +67,20 @@ interface CustomerContextType {
   reviews: Record<string, ProductReview[]>
   getProductReviews: (productId: string) => ProductReview[]
   fetchProductReviews: (productId: string) => Promise<void>
+  checkReviewEligibility: (productId: string) => Promise<{
+    canReview: boolean
+    hasPurchased: boolean
+    alreadyReviewed: boolean
+    existingReview?: any
+    message: string
+  }>
   submitReview: (productId: string, data: { rating: number; title?: string; comment: string }) => Promise<{ success: boolean; message?: string }>
 }
 
 const CustomerContext = createContext<CustomerContextType | undefined>(undefined)
 
-// Fallback seed customer state
-const INITIAL_DEMO_CUSTOMER: CustomerUser = {
-  id: 'usr-patron-01',
-  name: 'Elena Vance',
-  email: 'elena@vance.design',
-  phone: '+91 98401 23456',
-  role: 'CUSTOMER',
-  createdAt: '2025-11-14T10:30:00.000Z',
-}
-
 export function CustomerProvider({ children }: { children: React.ReactNode }) {
-  const [customer, setCustomer] = useState<CustomerUser | null>(INITIAL_DEMO_CUSTOMER)
+  const [customer, setCustomer] = useState<CustomerUser | null>(null)
   const [authModalOpen, setAuthModalOpen] = useState<'login' | 'register' | null>(null)
   const [orders, setOrders] = useState<CustomerOrder[]>([])
   const [savedDesigns, setSavedDesigns] = useState<CustomerSavedDesign[]>([])
@@ -108,7 +105,7 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
       productId: it.productId || it.product?.id || '',
       productName: it.productName || it.product?.name || 'Handcrafted Tableware',
       productType: it.productType || it.product?.type || 'Atelier Ceramic',
-      productImage: it.productImage || it.customSnapshotUrl || it.product?.image || '/unifort-plate-light.jpg',
+      productImage: it.productImage || it.customSnapshotUrl || it.product?.image || '/products/unifort-plate-light.jpg',
       price: Number(it.price || 0),
       quantity: it.quantity || 1,
       bespokeDesignId: it.customDesignId || undefined,
@@ -151,7 +148,7 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
       primaryGlazeColor: d.primaryGlazeColor || '#2B2B2B',
       accentGlazeColor: d.accentGlazeColor || undefined,
       status: d.status || 'DRAFT',
-      previewUrl: d.thumbnailUrl || d.previewUrl || '/unifort-plate-light.jpg',
+      previewUrl: d.thumbnailUrl || d.previewUrl || '/products/unifort-plate-light.jpg',
       craftsmanNotes: d.craftsmanNotes || undefined,
       elementsCount: Array.isArray(d.customElements) ? d.customElements.length : (d.elementsCount || 1),
       createdAt: d.createdAt,
@@ -214,7 +211,7 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  // Fetch product reviews
+  // Fetch product reviews dynamically
   const fetchProductReviews = useCallback(async (productId: string) => {
     const res = await api.get(`/reviews/product/${encodeURIComponent(productId)}`)
     if (res.success && res.data?.reviews) {
@@ -222,14 +219,33 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
         id: r.id,
         productId: r.productId,
         userId: r.userId,
-        userName: r.user ? `${r.user.firstName} ${r.user.lastName}`.trim() : 'Patron',
+        userName: r.user ? `${r.user.firstName || ''} ${r.user.lastName || ''}`.trim() || 'Patron' : 'Patron',
         rating: r.rating,
         title: r.title || undefined,
         comment: r.comment,
         status: r.isApproved ? 'APPROVED' : 'PENDING',
         createdAt: r.createdAt,
       }))
-      setReviews((prev) => ({ ...prev, [productId]: revs }))
+      setReviews((prev) => ({
+        ...prev,
+        [productId]: revs,
+        ...(res.data.productId ? { [res.data.productId]: revs } : {}),
+      }))
+    }
+  }, [])
+
+  // Check if current user is eligible to review (verified purchase check)
+  const checkReviewEligibility = useCallback(async (productId: string) => {
+    const res = await api.get(`/reviews/eligibility/${encodeURIComponent(productId)}`)
+    if (res.success && res.data) {
+      return res.data
+    }
+    return {
+      canReview: false,
+      hasPurchased: false,
+      alreadyReviewed: false,
+      existingReview: null,
+      message: res.message || 'Unable to verify patron purchase eligibility.',
     }
   }, [])
 
@@ -260,25 +276,11 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
         } else {
           // Token expired or invalid
           clearCustomerToken()
+          setCustomer(null)
+          localStorage.removeItem('unifort_patron_profile')
         }
-      }
-
-      // If no token or token expired, check localStorage for cached demo state
-      try {
-        const storedCustomer = localStorage.getItem('unifort_patron_profile')
-        if (storedCustomer) {
-          setCustomer(JSON.parse(storedCustomer))
-        }
-        const storedOrders = localStorage.getItem('unifort_patron_orders')
-        if (storedOrders) {
-          setOrders(JSON.parse(storedOrders))
-        }
-        const storedDesigns = localStorage.getItem('unifort_patron_designs')
-        if (storedDesigns) {
-          setSavedDesigns(JSON.parse(storedDesigns))
-        }
-      } catch (e) {
-        console.error('Error hydrating customer state', e)
+      } else {
+        setCustomer(null)
       }
     }
 
@@ -660,40 +662,15 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
     })
 
     if (res.success && res.data) {
-      const newRev: ProductReview = {
-        id: res.data.id,
-        productId,
-        userId: res.data.userId,
-        userName: customer?.name || 'Verified Patron',
-        rating: res.data.rating,
-        title: res.data.title || undefined,
-        comment: res.data.comment,
-        status: res.data.isApproved ? 'APPROVED' : 'PENDING',
-        createdAt: res.data.createdAt,
-      }
-      setReviews((prev) => ({
-        ...prev,
-        [productId]: [newRev, ...(prev[productId] || [])],
-      }))
+      // Re-fetch live reviews for this product dynamically
+      await fetchProductReviews(productId)
       return { success: true, message: 'Thank you. Your tactile review has been published.' }
     }
 
-    // Local fallback
-    const fallback: ProductReview = {
-      id: `rev-${Date.now().toString().slice(-4)}`,
-      productId,
-      userName: customer?.name || 'Verified Patron',
-      rating: data.rating,
-      title: data.title,
-      comment: data.comment,
-      status: 'APPROVED',
-      createdAt: new Date().toISOString(),
+    return {
+      success: false,
+      message: res.message || 'Only verified patrons who have purchased this piece can submit a review.',
     }
-    setReviews((prev) => ({
-      ...prev,
-      [productId]: [fallback, ...(prev[productId] || [])],
-    }))
-    return { success: true, message: 'Thank you. Your tactile review has been published.' }
   }
 
   return (
@@ -726,6 +703,7 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
         reviews,
         getProductReviews,
         fetchProductReviews,
+        checkReviewEligibility,
         submitReview,
       }}
     >

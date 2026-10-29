@@ -3,11 +3,15 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
 
 export interface Product {
+  id?: string
   name: string
+  slug?: string
   type: string
   price: string
   image: string
   category: string
+  description?: string
+  status?: string
 }
 
 export interface BagItem {
@@ -50,10 +54,10 @@ export function BagProvider({ children }: { children: React.ReactNode }) {
       if (stored) {
         const parsed = JSON.parse(stored)
         const imageMap: Record<string, string> = {
-          'No. 01 Obsidian Plate': '/unifort-plate-light.jpg',
-          'No. 04 Violet Tumbler': '/unifort-tumbler-light.jpg',
-          'No. 07 Arc Carafe': '/unifort-carafe-light.jpg',
-          'No. 12 Basalt Bowl': '/unifort-bowl-light.jpg',
+          'No. 01 Obsidian Plate': '/products/unifort-plate-light.jpg',
+          'No. 04 Violet Tumbler': '/products/unifort-tumbler-light.jpg',
+          'No. 07 Arc Carafe': '/products/unifort-carafe-light.jpg',
+          'No. 12 Basalt Bowl': '/products/unifort-bowl-light.jpg',
         }
         const updated = parsed.map((item: BagItem) => {
           if (imageMap[item.product.name]) {

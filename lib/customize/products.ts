@@ -66,7 +66,7 @@ export const CUSTOMIZABLE_PRODUCTS: CustomizableProduct[] = [
     currency: '₹',
     description:
       'Turned by hand from mineral-rich stoneware clay. Features an ergonomic pulled handle and a smooth curved lip designed for morning rituals.',
-    image: '/unifort-tumbler-light.jpg',
+    image: '/products/unifort-tumbler-light.jpg',
     modelType: 'mug',
     defaultColors: {
       body: '#f7f6f2',
@@ -126,7 +126,7 @@ export const CUSTOMIZABLE_PRODUCTS: CustomizableProduct[] = [
     currency: '₹',
     description:
       'Generous dinner plate featuring a gently sloped shallow rim. Calibrated for modern dining presentation and effortless stacking.',
-    image: '/unifort-plate-light.jpg',
+    image: '/products/unifort-plate-light.jpg',
     modelType: 'plate',
     defaultColors: {
       body: '#232734',
@@ -171,7 +171,7 @@ export const CUSTOMIZABLE_PRODUCTS: CustomizableProduct[] = [
     currency: '₹',
     description:
       'Molten glass mouth-blown into beechwood molds. Features subtle organic optical ripples that refract daylight across the table.',
-    image: '/unifort-tumbler-light.jpg',
+    image: '/products/unifort-tumbler-light.jpg',
     modelType: 'tumbler',
     defaultColors: {
       body: '#8c9a87',
@@ -217,7 +217,7 @@ export const CUSTOMIZABLE_PRODUCTS: CustomizableProduct[] = [
     currency: '₹',
     description:
       'High-sided stoneware bowl for communal grain dishes, soups, or centerpiece fruits. Balanced base prevents rocking on wooden tables.',
-    image: '/unifort-bowl-light.jpg',
+    image: '/products/unifort-bowl-light.jpg',
     modelType: 'bowl',
     defaultColors: {
       body: '#484d56',
@@ -264,7 +264,7 @@ export const CUSTOMIZABLE_PRODUCTS: CustomizableProduct[] = [
     currency: '₹',
     description:
       'Architectural tabletop carafe for decanting cold-brew, natural wines, or mineral water. Features a tapered neck designed for effortless one-handed pouring.',
-    image: '/unifort-carafe-light.jpg',
+    image: '/products/unifort-carafe-light.jpg',
     modelType: 'carafe',
     defaultColors: {
       body: '#273859',
@@ -309,7 +309,7 @@ export const CUSTOMIZABLE_PRODUCTS: CustomizableProduct[] = [
     currency: '₹',
     description:
       'Pure unbleached organic linen-canvas tote built for market runs, sketchbook portfolios, or weekend market finds. Reinforced interior pockets and twin carry handles.',
-    image: '/unifort-table-setting.jpg',
+    image: '/products/unifort-table-setting.jpg',
     modelType: 'tote',
     defaultColors: {
       body: '#f7f6f2',
@@ -371,7 +371,7 @@ export const CUSTOMIZABLE_PRODUCTS: CustomizableProduct[] = [
     currency: '₹',
     description:
       'Vacuum-insulated travel companion keeping beverages cold for 24h or steaming hot for 12h. Finished in a velvety powder coat that resists condensation.',
-    image: '/unifort-craft-glaze.jpg',
+    image: '/products/unifort-craft-glaze.jpg',
     modelType: 'bottle',
     defaultColors: {
       body: '#232734',
@@ -417,7 +417,7 @@ export const CUSTOMIZABLE_PRODUCTS: CustomizableProduct[] = [
     currency: '₹',
     description:
       'Absorbent ceramic coasters backed with soft Portuguese cork to protect timber tables. Hand-stamped with your custom crest or art.',
-    image: '/unifort-atelier-light.jpg',
+    image: '/products/unifort-atelier-light.jpg',
     modelType: 'coaster',
     defaultColors: {
       body: '#f7f6f2',

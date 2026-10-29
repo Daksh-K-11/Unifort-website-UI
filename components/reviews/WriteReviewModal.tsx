@@ -9,6 +9,13 @@ interface WriteReviewModalProps {
   productName: string
   isOpen: boolean
   onClose: () => void
+  existingReview?: {
+    id: string
+    rating: number
+    title?: string | null
+    comment: string
+  } | null
+  orderNumber?: string
 }
 
 export function WriteReviewModal({
@@ -16,15 +23,34 @@ export function WriteReviewModal({
   productName,
   isOpen,
   onClose,
+  existingReview,
+  orderNumber,
 }: WriteReviewModalProps) {
   const { customer, submitReview } = useCustomer()
-  const [rating, setRating] = useState(5)
+  const [rating, setRating] = useState(existingReview?.rating || 5)
   const [hoverRating, setHoverRating] = useState<number | null>(null)
-  const [title, setTitle] = useState('')
-  const [comment, setComment] = useState('')
+  const [title, setTitle] = useState(existingReview?.title || '')
+  const [comment, setComment] = useState(existingReview?.comment || '')
   const [loading, setLoading] = useState(false)
   const [successMsg, setSuccessMsg] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
+
+  // Sync state whenever existingReview or isOpen changes
+  React.useEffect(() => {
+    if (isOpen) {
+      if (existingReview) {
+        setRating(existingReview.rating || 5)
+        setTitle(existingReview.title || '')
+        setComment(existingReview.comment || '')
+      } else {
+        setRating(5)
+        setTitle('')
+        setComment('')
+      }
+      setErrorMsg('')
+      setSuccessMsg('')
+    }
+  }, [isOpen, existingReview])
 
   if (!isOpen) return null
 
@@ -74,14 +100,22 @@ export function WriteReviewModal({
           <X className="w-5 h-5" />
         </button>
 
-        <span className="text-[10px] uppercase tracking-[0.2em] text-[#424a70] font-semibold block mb-1">
-          Tactile Appraisal
-        </span>
+        <div className="flex flex-wrap items-center gap-2 mb-2">
+          <span className="text-[10px] uppercase tracking-[0.2em] text-[#424a70] font-semibold">
+            Tactile Appraisal
+          </span>
+          <span className="text-[10px] text-emerald-800 bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 rounded-full font-mono flex items-center gap-1 font-medium">
+            <span>✓</span>
+            <span>Verified Patron Purchase{orderNumber ? ` • ${orderNumber}` : ''}</span>
+          </span>
+        </div>
         <h2 className="text-xl font-serif font-medium text-[#1c2033] mb-1">
-          Review {productName}
+          {existingReview ? `Update Review: ${productName}` : `Review ${productName}`}
         </h2>
         <p className="text-xs text-[#424a70]/70 mb-5">
-          Share your impression of weight, mineral glaze depth, and dining performance.
+          {existingReview
+            ? 'Adjust your thoughts on glaze finish, daily handling, and dining performance.'
+            : 'Share your impression of weight, mineral glaze depth, and dining performance.'}
         </p>
 
         {successMsg ? (
@@ -170,7 +204,7 @@ export function WriteReviewModal({
                 className="px-5 py-2.5 bg-[#424a70] hover:bg-[#4f5987] text-white text-xs font-medium rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
                 {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                <span>Publish Tactile Review</span>
+                <span>{existingReview ? 'Update Appraisal' : 'Publish Tactile Review'}</span>
               </button>
             </div>
           </form>

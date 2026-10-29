@@ -44,6 +44,10 @@ const sectionTitles: Record<AdminSection, { title: string; subtitle: string }> =
     title: 'User & Staff RBAC Management',
     subtitle: 'Access rights, staff credentials, and role assignments (Admin only).',
   },
+  media: {
+    title: 'Media & Digital Assets',
+    subtitle: 'Upload, preview, copy paths, and manage storefront tableware photography and assets.',
+  },
   'audit-logs': {
     title: 'Security Audit Trail',
     subtitle: 'Tamper-resistant cryptographic activity logs (Admin only).',

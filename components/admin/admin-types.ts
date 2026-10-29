@@ -235,6 +235,7 @@ export type AdminSection =
   | 'orders'
   | 'products'
   | 'categories'
+  | 'media'
   | 'inquiries'
   | 'reviews'
   | 'users'

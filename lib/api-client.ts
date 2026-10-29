@@ -29,15 +29,9 @@ export const ADMIN_TOKEN_KEY = 'unifort_admin_token'
 export const getToken = (preferAdmin = false): string | null => {
   if (typeof window === 'undefined') return null
   if (preferAdmin) {
-    const adminToken = sessionStorage.getItem(ADMIN_TOKEN_KEY) || localStorage.getItem(ADMIN_TOKEN_KEY)
-    if (adminToken) return adminToken
+    return sessionStorage.getItem(ADMIN_TOKEN_KEY) || localStorage.getItem(ADMIN_TOKEN_KEY) || null
   }
-  return (
-    localStorage.getItem(TOKEN_KEY) ||
-    sessionStorage.getItem(ADMIN_TOKEN_KEY) ||
-    localStorage.getItem(ADMIN_TOKEN_KEY) ||
-    null
-  )
+  return localStorage.getItem(TOKEN_KEY) || null
 }
 
 export const setCustomerToken = (token: string): void => {

@@ -42,7 +42,7 @@ export function CustomerAuthModal() {
 
   const handleQuickDemoFill = (roleEmail: string, roleName: string) => {
     setEmail(roleEmail)
-    setPassword('Patron@12345')
+    setPassword('Customer@12345')
     setName(roleName)
     setPhone('+91 98401 23456')
     setError('')

@@ -1550,103 +1550,275 @@ img {
   font-size: 12px;
 }
 
-/* Quick View Modal */
+/* Product Quick Modal Overlay */
 .modal-backdrop {
   position: fixed;
   inset: 0;
   z-index: 50;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  padding: 20px;
-  background: rgba(27, 31, 49, 0.45);
-  backdrop-filter: blur(14px) saturate(130%);
-  animation: modal-backdrop-in 0.35s ease both;
+  padding: clamp(16px, 3vh, 40px) clamp(12px, 2.5vw, 24px);
+  background: rgba(14, 18, 30, 0.76);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  animation: modal-backdrop-in 0.22s ease both;
 }
 
 .quick-modal {
   position: relative;
-  background: rgba(255, 255, 255, 0.94);
-  backdrop-filter: blur(28px) saturate(170%);
-  max-width: 900px;
+  margin: auto;
+  background: #ffffff;
+  max-width: 880px;
   width: 100%;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  border: 1px solid rgba(255, 255, 255, 0.95);
+  max-height: calc(100vh - 48px);
+  max-height: calc(100dvh - 48px);
+  border: 1px solid rgba(66, 74, 112, 0.16);
   border-radius: 24px;
-  box-shadow: 0 30px 80px rgba(66, 74, 112, 0.18),
-              inset 0 1px 2px rgba(255, 255, 255, 0.95);
-  overflow: hidden;
-  animation: modal-pop-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.05s both;
-  transform-origin: center;
+  box-shadow: 0 32px 80px -16px rgba(10, 14, 28, 0.4), 0 10px 24px -6px rgba(10, 14, 28, 0.2);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  animation: modal-pop-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-.modal-image {
-  min-height: 520px;
-  position: relative;
-  background: #f1edf5;
-}
-
-.modal-copy {
-  padding: clamp(28px, 5vw, 70px);
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.modal-copy .display {
-  margin: 16px 0 20px;
-}
-
-.modal-price {
-  margin: 30px 0;
-  font-size: 24px;
-  font-family: 'Cormorant Garamond', serif;
-  color: #424a70;
-  font-weight: 600;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-top: 1px solid rgba(66, 74, 112, 0.1);
-  border-bottom: 1px solid rgba(66, 74, 112, 0.1);
-  padding: 14px 0;
-}
-
-.modal-price span {
-  color: var(--muted);
-  font-family: 'DM Sans', sans-serif;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-}
-
+/* Single Close Button */
 .close-button {
   position: absolute;
-  z-index: 2;
-  right: 16px;
   top: 16px;
-  border: 1px solid rgba(66, 74, 112, 0.15);
-  background: rgba(255, 255, 255, 0.85);
-  color: #353b58;
-  padding: 8px;
+  right: 16px;
+  z-index: 30;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(66, 74, 112, 0.18);
+  background: rgba(255, 255, 255, 0.95);
+  color: #1c2033;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   backdrop-filter: blur(8px);
-  transition: all 0.2s;
+  box-shadow: 0 4px 14px rgba(10, 14, 28, 0.14);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+  flex-shrink: 0;
 }
 
 .close-button:hover {
-  background: #ffffff;
-  color: #1a1e30;
-  border-color: #424a70;
+  background: #1c2033;
+  color: #ffffff;
+  border-color: #1c2033;
   transform: rotate(90deg);
 }
 
 .close-button svg {
-  width: 18px;
-  height: 18px;
+  width: 17px;
+  height: 17px;
+}
+
+/* Primary Top Row: Image to the side (fits without crop), Main content to the side */
+.modal-primary-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  gap: clamp(20px, 3.5vw, 36px);
+  padding: clamp(24px, 3.5vw, 36px) clamp(24px, 3.5vw, 36px) 24px;
+  border-bottom: 1px solid rgba(66, 74, 112, 0.1);
+  align-items: center;
+}
+
+.modal-image-col {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.modal-image-frame {
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+  height: 320px;
+  background: #faf9fc;
+  border-radius: 18px;
+  border: 1px solid rgba(66, 74, 112, 0.08);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+}
+
+.modal-fit-image {
+  object-fit: contain !important;
+  width: 100% !important;
+  height: 100% !important;
+  position: relative !important;
+  filter: drop-shadow(0 10px 20px rgba(35, 41, 68, 0.1));
+}
+
+.modal-main-content {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding-right: 20px;
+}
+
+.modal-main-content .eyebrow {
+  margin-bottom: 6px;
+  display: inline-block;
+}
+
+.modal-main-content .display {
+  margin: 0 0 4px;
+  line-height: 1.15;
+}
+
+.modal-piece-type {
+  font-size: 12px;
+  color: #687194;
+  font-family: 'DM Sans', sans-serif;
+  margin-bottom: 12px;
+  display: block;
+}
+
+.modal-price {
+  margin: 0 0 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid rgba(66, 74, 112, 0.12);
+  border-bottom: 1px solid rgba(66, 74, 112, 0.12);
+  padding: 12px 0;
+}
+
+.modal-price-number {
+  font-size: 22px;
+  font-family: 'Cormorant Garamond', serif;
+  color: #1c2033;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.modal-price-tax {
+  font-size: 10px;
+  color: #687194;
+  margin-top: 2px;
+}
+
+.modal-dispatch-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #047857;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  padding: 5px 9px;
+  border-radius: 999px;
+}
+
+.dispatch-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+}
+
+.modal-actions-wrap {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+/* Secondary Content Below: Description, Specifications, Reviews */
+.modal-rest-content {
+  padding: 24px clamp(24px, 3.5vw, 36px) clamp(28px, 4vw, 40px);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  background: #ffffff;
+}
+
+.modal-details-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.modal-section-title {
+  font-size: 11px;
+  font-family: 'DM Sans', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #687194;
+  font-weight: 600;
+  margin: 0;
+}
+
+.modal-piece-desc {
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: #4a5170;
+  margin: 0;
+}
+
+/* Materiality & Specs Grid */
+.modal-spec-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  padding: 12px 14px;
+  background: #faf9fc;
+  border: 1px solid rgba(66, 74, 112, 0.1);
+  border-radius: 14px;
+}
+
+.spec-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.spec-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #687194;
+  font-weight: 500;
+}
+
+.spec-value {
+  font-size: 11px;
+  font-weight: 600;
+  color: #1c2033;
+}
+
+@media (max-width: 768px) {
+  .modal-primary-row {
+    grid-template-columns: 1fr;
+    padding: 24px 20px 20px;
+    gap: 20px;
+  }
+
+  .modal-main-content {
+    padding-right: 0;
+  }
+
+  .modal-image-frame {
+    max-width: 100%;
+    height: 250px;
+  }
+
+  .modal-spec-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .modal-rest-content {
+    padding: 20px 20px 28px;
+  }
 }
 
 /* Bag Drawer */

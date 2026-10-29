@@ -109,7 +109,7 @@ function TrackContent() {
             productId: it.productId,
             productName: it.productName,
             productType: it.productType,
-            productImage: it.productImage || '/unifort-plate-light.jpg',
+            productImage: it.productImage || '/products/unifort-plate-light.jpg',
             price: Number(it.price || 0),
             quantity: it.quantity,
             bespokeDesignId: it.customDesignId,
@@ -472,7 +472,7 @@ function TrackContent() {
                       <div className="flex items-center gap-3">
                         <div className="relative w-12 h-12 rounded-lg bg-[#faf9fc] border border-[rgba(66,74,112,0.1)] overflow-hidden shrink-0">
                           <Image
-                            src={it.productImage || '/unifort-plate-light.jpg'}
+                            src={it.productImage || '/products/unifort-plate-light.jpg'}
                             alt={it.productName}
                             fill
                             sizes="60px"

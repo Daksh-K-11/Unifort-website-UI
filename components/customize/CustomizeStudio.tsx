@@ -20,6 +20,7 @@ import {
   generateProductionSpecJson,
 } from '@/lib/customize/export'
 import { useBag } from '@/lib/bag-context'
+import { useProducts } from '@/lib/products-context'
 import { ThreeProductViewer, ThreeProductViewerRef } from './ThreeProductViewer'
 import { InteractiveCanvas } from './InteractiveCanvas'
 import { TopToolbar } from './TopToolbar'
@@ -53,12 +54,14 @@ type ToolTab = 'colors' | 'text' | 'image' | 'graphic' | 'pattern' | 'templates'
 
 export function CustomizeStudio() {
   const { addToBag, setIsBagOpen, setToastMessage } = useBag()
+  const { customizableItems } = useProducts()
   const searchParams = useSearchParams()
 
   // Read URL params: if user came from a specific product card, auto-select it; otherwise start at Catalog!
   const initialPieceParam = searchParams.get('piece') || searchParams.get('product')
+  const itemsPool = customizableItems.length > 0 ? customizableItems : CUSTOMIZABLE_PRODUCTS
   const initialProduct = initialPieceParam
-    ? CUSTOMIZABLE_PRODUCTS.find(
+    ? itemsPool.find(
         (p) =>
           p.id.toLowerCase() === initialPieceParam.toLowerCase() ||
           p.name.toLowerCase().includes(initialPieceParam.toLowerCase())
@@ -68,9 +71,26 @@ export function CustomizeStudio() {
   // Selected product (null = show catalog page first!)
   const [product, setProduct] = useState<CustomizableProduct | null>(initialProduct)
 
+  // Sync if URL param provided and itemsPool updates
+  useEffect(() => {
+    if (initialPieceParam && !product && itemsPool.length > 0) {
+      const found = itemsPool.find(
+        (p) =>
+          p.id.toLowerCase() === initialPieceParam.toLowerCase() ||
+          p.name.toLowerCase().includes(initialPieceParam.toLowerCase())
+      )
+      if (found) {
+        setProduct(found)
+        setColors(found.defaultColors)
+        setActiveSurfaceId(found.surfaces[0]?.id || 'front')
+        setTitle(`${found.name} Custom`)
+      }
+    }
+  }, [initialPieceParam, itemsPool, product])
+
   // Design state
   const [colors, setColors] = useState<ProductColors>(
-    initialProduct?.defaultColors || CUSTOMIZABLE_PRODUCTS[0].defaultColors
+    initialProduct?.defaultColors || itemsPool[0]?.defaultColors || CUSTOMIZABLE_PRODUCTS[0].defaultColors
   )
   const [finish, setFinish] = useState<FinishType>('satin')
   const [activeSurfaceId, setActiveSurfaceId] = useState<string>(

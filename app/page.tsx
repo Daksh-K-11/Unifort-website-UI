@@ -14,6 +14,7 @@ import { InquiryType } from '@/lib/customer-types'
 import { BagDrawer } from '@/components/BagDrawer'
 import { BagToast } from '@/components/BagToast'
 import { UnifortButton, Button } from '@/components/ui/UnifortButton'
+import { ProductsProvider, useProducts, StorefrontProduct } from '@/lib/products-context'
 
 const CustomizeStudio = dynamic(
   () => import('@/components/customize/CustomizeStudio').then((mod) => mod.CustomizeStudio),
@@ -100,16 +101,11 @@ const TrackPage = dynamic(
   }
 )
 
-const products = [
-  { name: 'No. 01 Obsidian Plate', type: 'Dinner plate · 28 cm', price: '₹84', image: '/unifort-plate-light.jpg', category: 'Table' },
-  { name: 'No. 04 Violet Tumbler', type: 'Hand-blown glass · 320 ml', price: '₹62', image: '/unifort-tumbler-light.jpg', category: 'Glass' },
-  { name: 'No. 07 Arc Carafe', type: 'Smoked glass · 1.2 L', price: '₹148', image: '/unifort-carafe-light.jpg', category: 'Glass' },
-  { name: 'No. 12 Basalt Bowl', type: 'Stoneware · 22 cm', price: '₹96', image: '/unifort-bowl-light.jpg', category: 'Table' },
-]
+// Products are fetched dynamically from the atelier backend API via ProductsProvider
 
 const craftSlides = [
   {
-    image: '/unifort-craft-glaze.jpg',
+    image: '/products/unifort-craft-glaze.jpg',
     tag: 'Craft & Atelier',
     title: 'Mineral-rich glazes that catch daylight.',
     desc: 'Each piece undergoes a 1280°C reduction firing, fusing volcanic ash and slate minerals into an impervious, satiny surface that deepens with age.',
@@ -117,7 +113,7 @@ const craftSlides = [
     ctaHref: '/collection?piece=No.%2001%20Obsidian%20Plate',
   },
   {
-    image: '/unifort-table-setting.jpg',
+    image: '/products/unifort-table-setting.jpg',
     tag: 'Living Space',
     title: 'Designed for the warmth of gathering.',
     desc: 'Proportions calibrated to sit naturally alongside linen, candles, and silverware. Tableware that elevates casual breakfasts and 14-person banquets alike.',
@@ -125,7 +121,7 @@ const craftSlides = [
     ctaHref: '/collection',
   },
   {
-    image: '/unifort-atelier-light.jpg',
+    image: '/products/unifort-atelier-light.jpg',
     tag: 'Artisan Heritage',
     title: 'Human touch in every contour.',
     desc: 'Small-batch production in our Chennai atelier preserves the distinct micro-variations that make every tumbler, bowl, and plate truly singular.',
@@ -295,6 +291,7 @@ function CraftCarousel() {
 }
 
 function Home() {
+  const { collectionProducts } = useProducts()
   return (
     <>
       <main>
@@ -332,7 +329,7 @@ function Home() {
           <div className="manifesto-thumb-wrap">
             <div className="manifesto-thumb">
               <Image
-                src="/unifort-craft-glaze.jpg"
+                src="/products/unifort-craft-glaze.jpg"
                 alt="Handcrafting ceramic tableware in Chennai studio"
                 fill
                 sizes="220px"
@@ -373,8 +370,8 @@ function Home() {
             </Link>
           </div>
           <div className="product-row">
-            {products.slice(0, 3).map((p, i) => (
-              <ProductCard key={p.name} product={p} index={i} />
+            {collectionProducts.slice(0, 3).map((p, i) => (
+              <ProductCard key={p.id || p.name} product={p} index={i} />
             ))}
           </div>
         </section>
@@ -398,7 +395,7 @@ function Home() {
   )
 }
 
-function ProductCard({ product, index }: { product: typeof products[number]; index: number }) {
+function ProductCard({ product, index }: { product: StorefrontProduct; index: number }) {
   return (
     <Link href={`/collection?piece=${encodeURIComponent(product.name)}`} className="product-card">
       <div className="product-image">
@@ -421,21 +418,62 @@ function ProductCard({ product, index }: { product: typeof products[number]; ind
 
 function Collection() {
   const router = useRouter()
+  const { collectionProducts, collectionCategories, loading } = useProducts()
   const [filter, setFilter] = useState('All pieces')
-  const [selected, setSelected] = useState<typeof products[number] | null>(null)
+  const [selected, setSelected] = useState<StorefrontProduct | null>(null)
   const [modalQuantity, setModalQuantity] = useState(1)
   const searchParams = useSearchParams()
   const { addToBag, setIsBagOpen } = useBag()
 
-  const filters = ['All pieces', 'Table', 'Glass']
+  const filters = collectionCategories.length > 0 ? collectionCategories : ['All pieces', 'Table', 'Glass']
 
   useEffect(() => {
     const piece = searchParams.get('piece')
-    setSelected(piece ? products.find((product) => product.name === piece) ?? null : null)
+    if (piece) {
+      const pieceLower = piece.toLowerCase()
+      const found = collectionProducts.find(
+        (product) =>
+          product.name.toLowerCase() === pieceLower ||
+          product.slug?.toLowerCase() === pieceLower ||
+          product.id === piece
+      )
+      setSelected(found ?? null)
+    } else {
+      setSelected(null)
+    }
     setModalQuantity(1)
-  }, [searchParams])
+  }, [searchParams, collectionProducts])
 
-  const shown = filter === 'All pieces' ? products : products.filter((p) => p.category === filter)
+  // Dismiss modal on Escape key press
+  useEffect(() => {
+    if (!selected) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setSelected(null)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [selected])
+
+  // Prevent background scroll when piece modal is active
+  useEffect(() => {
+    if (selected) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [selected])
+
+  const shown =
+    filter === 'All pieces'
+      ? collectionProducts
+      : collectionProducts.filter(
+          (p) => p.category.toLowerCase().trim() === filter.toLowerCase().trim()
+        )
 
   const handleAddToCart = () => {
     if (selected) {
@@ -483,17 +521,28 @@ function Collection() {
               {shown.length} pieces <ChevronDown />
             </span>
           </div>
-          <div className="catalog-grid">
-            {shown.map((p, i) => (
-              <div key={p.name} onClick={() => setSelected(p)}>
-                <ProductCard product={p} index={i} />
-              </div>
-            ))}
-          </div>
+          {loading && collectionProducts.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-3 text-[#687194]">
+              <div className="w-7 h-7 rounded-full border-2 border-[#424a70] border-t-transparent animate-spin" />
+              <span className="text-xs uppercase tracking-wider font-medium">Loading Atelier Collection...</span>
+            </div>
+          ) : shown.length === 0 ? (
+            <div className="text-center py-16 text-[#687194] text-sm">
+              No pieces currently available in &ldquo;{filter}&rdquo;.
+            </div>
+          ) : (
+            <div className="catalog-grid">
+              {shown.map((p, i) => (
+                <div key={p.id || p.name} onClick={() => setSelected(p)}>
+                  <ProductCard product={p} index={i} />
+                </div>
+              ))}
+            </div>
+          )}
         </section>
         <section className="ritual-strip">
           <div className="ritual-image">
-            <Image src="/unifort-collection-light.jpg" alt="UNIFORT stacked tableware collection in natural light" fill sizes="50vw" />
+            <Image src="/products/unifort-collection-light.jpg" alt="UNIFORT stacked tableware collection in natural light" fill sizes="50vw" />
           </div>
           <div className="ritual-copy">
             <span className="eyebrow">The ritual of use</span>
@@ -507,56 +556,124 @@ function Collection() {
         </section>
       </main>
       {selected && (
-        <div className="modal-backdrop" onClick={() => setSelected(null)}>
-          <div className="quick-modal" onClick={(e) => e.stopPropagation()}>
-            <button className="close-button" onClick={() => setSelected(null)} aria-label="Close piece details">
-              <X />
+        <div
+          className="modal-backdrop"
+          onClick={() => setSelected(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="modal-piece-title"
+        >
+          <div
+            className="quick-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              className="close-button"
+              onClick={() => setSelected(null)}
+              aria-label="Close piece details (Esc)"
+              title="Close piece details (Esc)"
+            >
+              <X className="w-4 h-4" />
             </button>
-            <div className="modal-image">
-              <Image src={selected.image} alt={selected.name} fill sizes="45vw" />
-            </div>
-            <div className="modal-copy">
-              <span className="eyebrow">UNIFORT / {selected.category}</span>
-              <h2 className="display display-small">{selected.name}</h2>
-              <p className="muted">
-                {selected.type}. Hand-finished in small editions with a patina designed to deepen over time.
-              </p>
-              <div className="modal-price">
-                {selected.price}
-                <span className="text-emerald-700 font-medium">In Stock · Dispatched in 24h</span>
-              </div>
-              <div className="flex items-center gap-3 my-3">
-                <span className="text-xs text-[#687194]">Quantity:</span>
-                <div className="flex items-center border border-[rgba(66,74,112,0.2)] rounded-lg bg-[#faf9fc]">
-                  <button
-                    onClick={() => setModalQuantity((q) => Math.max(1, q - 1))}
-                    className="p-1.5 text-[#424a70] hover:text-[#1c2033]"
-                    aria-label="Decrease quantity"
-                  >
-                    <Minus className="w-3.5 h-3.5" />
-                  </button>
-                  <span className="px-3 text-xs font-mono font-semibold text-[#1c2033]">{modalQuantity}</span>
-                  <button
-                    onClick={() => setModalQuantity((q) => q + 1)}
-                    className="p-1.5 text-[#424a70] hover:text-[#1c2033]"
-                    aria-label="Increase quantity"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                  </button>
+
+            {/* Top Section: Image only until it fits (not cropped) on the side, Main Content on the side */}
+            <div className="modal-primary-row">
+              <div className="modal-image-col">
+                <div className="modal-image-frame">
+                  <Image
+                    src={selected.image}
+                    alt={selected.name}
+                    fill
+                    sizes="(max-width: 768px) 100vw, 420px"
+                    className="modal-fit-image"
+                    priority
+                  />
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                <UnifortButton variant="primary" onClick={handleAddToCart}>
-                  Add to Bag
-                </UnifortButton>
-                <UnifortButton variant="outline" onClick={handleBuyNow}>
-                  Buy Now
-                </UnifortButton>
-                <UnifortButton href="/customize" variant="ghost">
-                  Customize in 3D
-                </UnifortButton>
+
+              <div className="modal-main-content">
+                <span className="eyebrow">UNIFORT / {selected.category}</span>
+                <h2 id="modal-piece-title" className="display display-small">{selected.name}</h2>
+                <span className="modal-piece-type">{selected.type}</span>
+
+                <div className="modal-price">
+                  <div className="flex flex-col">
+                    <span className="modal-price-number">{selected.price}</span>
+                    <span className="modal-price-tax">Includes all local taxes · Free studio shipping</span>
+                  </div>
+                  <div className="modal-dispatch-badge">
+                    <span className="dispatch-dot" />
+                    <span>In Stock · Ships in 24h</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 my-3">
+                  <span className="text-xs text-[#687194] font-medium">Quantity:</span>
+                  <div className="flex items-center border border-[rgba(66,74,112,0.2)] rounded-lg bg-[#faf9fc]">
+                    <button
+                      onClick={() => setModalQuantity((q) => Math.max(1, q - 1))}
+                      className="p-1.5 text-[#424a70] hover:text-[#1c2033] cursor-pointer"
+                      aria-label="Decrease quantity"
+                    >
+                      <Minus className="w-3.5 h-3.5" />
+                    </button>
+                    <span className="px-3 text-xs font-mono font-semibold text-[#1c2033]">{modalQuantity}</span>
+                    <button
+                      onClick={() => setModalQuantity((q) => q + 1)}
+                      className="p-1.5 text-[#424a70] hover:text-[#1c2033] cursor-pointer"
+                      aria-label="Increase quantity"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="modal-actions-wrap">
+                  <UnifortButton variant="primary" onClick={handleAddToCart}>
+                    Add to Bag
+                  </UnifortButton>
+                  <UnifortButton variant="outline" onClick={handleBuyNow}>
+                    Buy Now
+                  </UnifortButton>
+                  {selected.isCustomizable && (
+                    <UnifortButton href={`/customize?piece=${encodeURIComponent(selected.name)}`} variant="ghost">
+                      Customize in 3D
+                    </UnifortButton>
+                  )}
+                </div>
               </div>
-              <ProductReviewsSection productId={selected.name} productName={selected.name} />
+            </div>
+
+            {/* Bottom Section: The rest comes below the image and the main content */}
+            <div className="modal-rest-content">
+              <div className="modal-details-block">
+                <h3 className="modal-section-title">Design & Materiality</h3>
+                <p className="modal-piece-desc">
+                  {selected.description || `${selected.type}. Hand-finished in small editions with a mineral glaze designed to deepen over time.`}
+                </p>
+              </div>
+
+              {/* Materiality & Specifications Grid */}
+              <div className="modal-spec-grid">
+                <div className="spec-item">
+                  <span className="spec-label">Material</span>
+                  <span className="spec-value">High-fire Stoneware</span>
+                </div>
+                <div className="spec-item">
+                  <span className="spec-label">Finish</span>
+                  <span className="spec-value">Matte Mineral Glaze</span>
+                </div>
+                <div className="spec-item">
+                  <span className="spec-label">Care</span>
+                  <span className="spec-value">Dishwasher Safe</span>
+                </div>
+                <div className="spec-item">
+                  <span className="spec-label">Craft</span>
+                  <span className="spec-value">Hand-finished in India</span>
+                </div>
+              </div>
+
+              <ProductReviewsSection productId={selected.id || selected.name} productName={selected.name} />
             </div>
           </div>
         </div>
@@ -816,7 +933,7 @@ function About() {
           </p>
           <div className="about-hero-image-wrap">
             <Image
-              src="/unifort-atelier-light.jpg"
+              src="/products/unifort-atelier-light.jpg"
               alt="UNIFORT master ceramicist in sunlit atelier"
               fill
               priority
@@ -923,47 +1040,49 @@ export default function Page() {
   return (
     <CustomerProvider>
       <BagProvider>
-        <div className="site">
-          <Header />
-          {pathname === '/collection' ? (
-            <Suspense fallback={<main className="page route-loading" aria-label="Loading collection" />}>
-              <Collection />
-            </Suspense>
-          ) : pathname === '/customize' ? (
-            <Suspense fallback={<main className="page route-loading" aria-label="Loading studio" />}>
-              <CustomizeStudio />
-            </Suspense>
-          ) : pathname === '/about' ? (
-            <Suspense fallback={<main className="page route-loading" aria-label="Loading about" />}>
-              <About />
-            </Suspense>
-          ) : pathname === '/contact' ? (
-            <Suspense fallback={<main className="page route-loading" aria-label="Loading contact" />}>
-              <Contact />
-            </Suspense>
-          ) : pathname === '/account' ? (
-            <Suspense fallback={<main className="page route-loading" aria-label="Loading patron portal" />}>
-              <AccountPortal />
-            </Suspense>
-          ) : pathname === '/checkout' ? (
-            <Suspense fallback={<main className="page route-loading" aria-label="Loading checkout" />}>
-              <CheckoutPage />
-            </Suspense>
-          ) : pathname === '/cart' ? (
-            <Suspense fallback={<main className="page route-loading" aria-label="Loading shopping bag" />}>
-              <CartPage />
-            </Suspense>
-          ) : pathname === '/track' ? (
-            <Suspense fallback={<main className="page route-loading" aria-label="Loading consignment tracking" />}>
-              <TrackPage />
-            </Suspense>
-          ) : (
-            <Home />
-          )}
-          <BagDrawer />
-          <BagToast />
-          <CustomerAuthModal />
-        </div>
+        <ProductsProvider>
+          <div className="site">
+            <Header />
+            {pathname === '/collection' ? (
+              <Suspense fallback={<main className="page route-loading" aria-label="Loading collection" />}>
+                <Collection />
+              </Suspense>
+            ) : pathname === '/customize' ? (
+              <Suspense fallback={<main className="page route-loading" aria-label="Loading studio" />}>
+                <CustomizeStudio />
+              </Suspense>
+            ) : pathname === '/about' ? (
+              <Suspense fallback={<main className="page route-loading" aria-label="Loading about" />}>
+                <About />
+              </Suspense>
+            ) : pathname === '/contact' ? (
+              <Suspense fallback={<main className="page route-loading" aria-label="Loading contact" />}>
+                <Contact />
+              </Suspense>
+            ) : pathname === '/account' ? (
+              <Suspense fallback={<main className="page route-loading" aria-label="Loading patron portal" />}>
+                <AccountPortal />
+              </Suspense>
+            ) : pathname === '/checkout' ? (
+              <Suspense fallback={<main className="page route-loading" aria-label="Loading checkout" />}>
+                <CheckoutPage />
+              </Suspense>
+            ) : pathname === '/cart' ? (
+              <Suspense fallback={<main className="page route-loading" aria-label="Loading shopping bag" />}>
+                <CartPage />
+              </Suspense>
+            ) : pathname === '/track' ? (
+              <Suspense fallback={<main className="page route-loading" aria-label="Loading consignment tracking" />}>
+                <TrackPage />
+              </Suspense>
+            ) : (
+              <Home />
+            )}
+            <BagDrawer />
+            <BagToast />
+            <CustomerAuthModal />
+          </div>
+        </ProductsProvider>
       </BagProvider>
     </CustomerProvider>
   )

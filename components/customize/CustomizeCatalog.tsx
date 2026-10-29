@@ -3,8 +3,8 @@
 import React, { useState } from 'react'
 import Image from 'next/image'
 import { CustomizableProduct } from '@/lib/customize/types'
-import { CUSTOMIZABLE_PRODUCTS } from '@/lib/customize/products'
-import { ArrowUpRight, Bookmark, Check, Move3d, Palette, Search, ShieldCheck, Sparkles, FolderOpen } from 'lucide-react'
+import { useProducts } from '@/lib/products-context'
+import { ArrowUpRight, Bookmark, Check, Move3d, Palette, Search, ShieldCheck, Sparkles, FolderOpen, Loader2 } from 'lucide-react'
 import { UnifortButton } from '@/components/ui/UnifortButton'
 
 interface CustomizeCatalogProps {
@@ -18,18 +18,21 @@ export function CustomizeCatalog({
   onOpenSavedDesigns,
   savedCount = 0,
 }: CustomizeCatalogProps) {
+  const { customizableItems, customizeCategories, loading } = useProducts()
   const [search, setSearch] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('All')
   const [sortBy, setSortBy] = useState<'featured' | 'price-asc' | 'price-desc' | 'name'>('featured')
 
-  const categories = ['All', 'Drinkware', 'Dinnerware', 'Table & Decor', 'Lifestyle']
+  const categories = customizeCategories.length > 0 ? customizeCategories : ['All', 'Drinkware', 'Dinnerware', 'Table & Decor', 'Lifestyle']
 
-  let filtered = CUSTOMIZABLE_PRODUCTS.filter((p) => {
-    const matchesCat = selectedCategory === 'All' || p.category === selectedCategory
+  let filtered = customizableItems.filter((p) => {
+    const matchesCat =
+      selectedCategory === 'All' ||
+      p.category.toLowerCase().trim() === selectedCategory.toLowerCase().trim()
     const matchesSearch =
       p.name.toLowerCase().includes(search.toLowerCase()) ||
       p.type.toLowerCase().includes(search.toLowerCase()) ||
-      p.description.toLowerCase().includes(search.toLowerCase())
+      (p.description && p.description.toLowerCase().includes(search.toLowerCase()))
     return matchesCat && matchesSearch
   })
 
@@ -97,7 +100,7 @@ export function CustomizeCatalog({
               onClick={onOpenSavedDesigns}
               title="Browse your saved designs"
             >
-              <span>Saved Designs</span>
+              <span>Saved</span>
               {savedCount > 0 ? (
                 <span className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-[#424a70] text-white">
                   {savedCount}
@@ -131,7 +134,12 @@ export function CustomizeCatalog({
           <span className="text-xs text-[#687194]">Click any piece to launch 3D Studio</span>
         </div>
 
-        {filtered.length === 0 ? (
+        {loading && customizableItems.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-3 text-[#687194] bg-white/60 backdrop-blur-md rounded-3xl border border-white/80 shadow-xs">
+            <Loader2 className="w-7 h-7 text-[#424a70] animate-spin" />
+            <span className="text-xs uppercase tracking-wider font-medium">Loading Atelier 3D Catalog...</span>
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="p-12 text-center bg-white/70 backdrop-blur-md rounded-3xl border border-dashed border-[rgba(66,74,112,0.2)]">
             <p className="text-sm font-semibold text-[#1c2033]">No customizable pieces match your query</p>
             <p className="text-xs text-[#687194] mt-1">Try clearing your filters or search terms.</p>

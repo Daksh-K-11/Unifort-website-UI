@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import Image from 'next/image'
 import { CustomizableProduct } from '@/lib/customize/types'
-import { CUSTOMIZABLE_PRODUCTS } from '@/lib/customize/products'
+import { useProducts } from '@/lib/products-context'
 import { ArrowUpRight, Search, X } from 'lucide-react'
 import { UnifortButton } from '@/components/ui/UnifortButton'
 
@@ -21,6 +21,7 @@ export function ProductSwitcherModal({
   onClose,
   onSelectProduct,
 }: ProductSwitcherModalProps) {
+  const { customizableItems, customizeCategories } = useProducts()
   const [search, setSearch] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('All')
   const [mounted, setMounted] = useState(false)
@@ -31,10 +32,12 @@ export function ProductSwitcherModal({
 
   if (!isOpen || !mounted) return null
 
-  const categories = ['All', 'Drinkware', 'Dinnerware', 'Table & Decor', 'Lifestyle']
+  const categories = customizeCategories.length > 0 ? customizeCategories : ['All', 'Drinkware', 'Dinnerware', 'Table & Decor', 'Lifestyle']
 
-  const filtered = CUSTOMIZABLE_PRODUCTS.filter((p) => {
-    const matchesCat = selectedCategory === 'All' || p.category === selectedCategory
+  const filtered = customizableItems.filter((p) => {
+    const matchesCat =
+      selectedCategory === 'All' ||
+      p.category.toLowerCase().trim() === selectedCategory.toLowerCase().trim()
     const matchesSearch =
       p.name.toLowerCase().includes(search.toLowerCase()) ||
       p.type.toLowerCase().includes(search.toLowerCase())
@@ -42,10 +45,10 @@ export function ProductSwitcherModal({
   })
 
   return createPortal(
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-4 z-50">
-      <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[88vh] sm:max-h-[85vh] shadow-2xl border border-[rgba(66,74,112,0.18)] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 bg-[#1c2033]/45 backdrop-blur-md flex items-center justify-center p-2.5 sm:p-4 z-50">
+      <div className="bg-white/90 backdrop-blur-2xl rounded-2xl w-full max-w-3xl max-h-[88vh] sm:max-h-[85vh] shadow-[0_24px_64px_rgba(28,32,51,0.2),inset_0_1px_1px_rgba(255,255,255,0.95)] border border-white/80 flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         {/* Header */}
-        <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-[rgba(66,74,112,0.12)]">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-[rgba(66,74,112,0.12)] bg-white/40">
           <div>
             <h2 className="text-sm font-semibold text-[#1c2033]">Switch Customizable Piece</h2>
             <p className="text-[11px] text-[#687194]">

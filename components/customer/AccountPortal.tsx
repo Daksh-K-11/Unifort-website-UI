@@ -127,7 +127,7 @@ export function AccountPortal() {
       name: `${design.title} (Bespoke)`,
       type: `${design.modelType.toUpperCase()} · Handcrafted Glaze · ${design.finish}`,
       price: '₹148',
-      image: '/unifort-plate-light.jpg',
+      image: '/products/unifort-plate-light.jpg',
       category: 'Bespoke Studio',
     })
     setIsBagOpen(true)
@@ -437,7 +437,7 @@ export function AccountPortal() {
                             >
                               <div className="w-10 h-10 rounded-xl bg-white relative overflow-hidden shrink-0 border border-[#424a70]/10">
                                 <Image
-                                  src={item.productImage || '/unifort-plate-light.jpg'}
+                                  src={item.productImage || '/products/unifort-plate-light.jpg'}
                                   alt={item.productName}
                                   fill
                                   sizes="40px"
