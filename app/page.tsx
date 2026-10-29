@@ -158,10 +158,7 @@ function Header() {
           <Link className={pathname === '/contact' ? 'active' : ''} href="/contact" onClick={() => setOpen(false)}>
             Contact
           </Link>
-          <Link className={pathname === '/track' ? 'active' : ''} href="/track" onClick={() => setOpen(false)}>
-            Track Order
-          </Link>
-          <Link className={pathname === '/account' ? 'active' : ''} href="/account" onClick={() => setOpen(false)}>
+          <Link className={pathname === '/account' || pathname?.startsWith('/account') ? 'active' : ''} href="/account" onClick={() => setOpen(false)}>
             Profile
           </Link>
         </nav>
@@ -169,15 +166,6 @@ function Header() {
           <button aria-label="Open menu" className="icon-button mobile-only" onClick={() => setOpen(!open)}>
             {open ? <X /> : <Menu />}
           </button>
-          <Link
-            href="/account"
-            className={`header-profile-btn ${pathname === '/account' ? 'active' : ''}`}
-            aria-label="Patron Profile"
-            title="Patron Profile"
-          >
-            <User className="w-3.5 h-3.5 shrink-0" />
-            <span className="hidden sm:inline">Profile</span>
-          </Link>
           <button
             className="header-cart"
             onClick={() => setIsBagOpen(true)}
@@ -207,7 +195,7 @@ function Footer() {
           <Link href="/collection">Collection</Link>
           <Link href="/cart">Shopping Bag</Link>
           <Link href="/customize">Customize Studio</Link>
-          <Link href="/track">Track Consignment</Link>
+          <Link href="/account?view=orders">Track Consignment</Link>
           <Link href="/account">Patron Portal</Link>
           <Link href="/admin">Atelier Admin</Link>
         </div>
@@ -1059,7 +1047,7 @@ export default function Page() {
               <Suspense fallback={<main className="page route-loading" aria-label="Loading contact" />}>
                 <Contact />
               </Suspense>
-            ) : pathname === '/account' ? (
+            ) : pathname === '/account' || pathname?.startsWith('/account') ? (
               <Suspense fallback={<main className="page route-loading" aria-label="Loading patron portal" />}>
                 <AccountPortal />
               </Suspense>
@@ -1073,7 +1061,7 @@ export default function Page() {
               </Suspense>
             ) : pathname === '/track' ? (
               <Suspense fallback={<main className="page route-loading" aria-label="Loading consignment tracking" />}>
-                <TrackPage />
+                <AccountPortal initialView="orders" />
               </Suspense>
             ) : (
               <Home />

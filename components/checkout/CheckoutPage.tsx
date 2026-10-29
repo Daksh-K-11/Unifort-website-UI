@@ -244,6 +244,8 @@ export function CheckoutPage() {
       setConfirmedOrder(result.order)
       clearBag()
       window.scrollTo({ top: 0, behavior: 'smooth' })
+    } else {
+      setValidationError(result.message || 'Failed to place order. Please check details and try again.')
     }
   }
 
@@ -303,7 +305,7 @@ export function CheckoutPage() {
           {/* Action Links */}
           <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
             <UnifortButton
-              href={`/track?order=${confirmedOrder.orderNumber}`}
+              href={`/account?view=orders&orderNumber=${confirmedOrder.orderNumber}`}
               variant="primary"
               size="md"
               icon={<Truck className="w-4 h-4" />}
@@ -311,7 +313,7 @@ export function CheckoutPage() {
               Track Live Delivery Status
             </UnifortButton>
             <UnifortButton
-              href="/account"
+              href="/account?view=orders"
               variant="outline"
               size="md"
               icon={<Package className="w-4 h-4" />}

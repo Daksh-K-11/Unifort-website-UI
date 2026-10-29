@@ -96,6 +96,7 @@ export async function apiClient<T = any>(
   try {
     const res = await fetch(url, {
       ...options,
+      cache: 'no-store',
       headers,
       credentials: 'omit',
     })

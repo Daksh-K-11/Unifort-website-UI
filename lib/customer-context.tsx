@@ -42,6 +42,7 @@ interface CustomerContextType {
   cancelOrder: (orderId: string) => Promise<{ success: boolean; message?: string }>
   markOrderReceived: (orderId: string) => Promise<{ success: boolean; message?: string }>
   getOrderById: (orderId: string) => CustomerOrder | undefined
+  trackConsignment: (orderNumber: string) => Promise<{ success: boolean; data?: any; message?: string }>
 
   // Saved 3D Bespoke Designs
   savedDesigns: CustomerSavedDesign[]
@@ -183,15 +184,37 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
 
   // Fetch live orders
   const refreshOrders = useCallback(async () => {
+    let combined: CustomerOrder[] = []
+
+    // 1. Pull guest / local session orders
+    try {
+      const stored = localStorage.getItem('unifort_placed_orders')
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        if (Array.isArray(parsed)) combined = parsed
+      }
+    } catch {}
+
+    // 2. Pull server orders if authenticated
     const res = await api.get('/orders/my-orders')
     if (res.success && Array.isArray(res.data)) {
       const formatted = res.data.map(mapBackendOrder)
-      setOrders(formatted)
-      try {
-        localStorage.setItem('unifort_patron_orders', JSON.stringify(formatted))
-      } catch (e) {
-        console.error('Failed to cache orders', e)
-      }
+      // Merge unique orders
+      const orderMap = new Map<string, CustomerOrder>()
+      formatted.forEach((o) => orderMap.set(o.orderNumber, o))
+      combined.forEach((o) => {
+        if (!orderMap.has(o.orderNumber)) {
+          orderMap.set(o.orderNumber, o)
+        }
+      })
+      combined = Array.from(orderMap.values())
+    }
+
+    setOrders(combined)
+    try {
+      localStorage.setItem('unifort_patron_orders', JSON.stringify(combined))
+    } catch (e) {
+      console.error('Failed to cache orders', e)
     }
   }, [])
 
@@ -452,10 +475,17 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
       },
     }))
 
+    const customerEmail = customer?.email || (data.shippingAddress as any).email || (data as any).email || 'patron@unifort.co'
+    const customerName = data.shippingAddress.fullName || customer?.name || 'Valued Patron'
+    const customerPhone = (data.shippingAddress as any).phone || customer?.phone || '+91 98401 23456'
+
     const payload = {
+      customerEmail,
+      customerName,
+      customerPhone,
       shippingAddress: {
-        recipientName: data.shippingAddress.fullName || customer?.name || 'Valued Patron',
-        phone: customer?.phone || '+91 98401 23456',
+        recipientName: customerName,
+        phone: customerPhone,
         addressLine1: data.shippingAddress.addressLine1,
         addressLine2: data.shippingAddress.addressLine2 || '',
         city: data.shippingAddress.city,
@@ -472,29 +502,21 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
 
     if (res.success && res.data) {
       const createdOrder = mapBackendOrder(res.data)
-      setOrders((prev) => [createdOrder, ...prev])
+      setOrders((prev) => [createdOrder, ...prev.filter((o) => o.orderNumber !== createdOrder.orderNumber)])
+      try {
+        const stored = JSON.parse(localStorage.getItem('unifort_placed_orders') || '[]')
+        localStorage.setItem(
+          'unifort_placed_orders',
+          JSON.stringify([createdOrder, ...stored.filter((o: any) => o.orderNumber !== createdOrder.orderNumber)])
+        )
+      } catch {}
       return { success: true, order: createdOrder }
     }
 
-    // Resilient fallback if user is in offline mode or non-persisted guest checkout
-    const totalAmount = data.items.reduce((sum, item) => sum + item.price * item.quantity, 0)
-    const fallbackOrder: CustomerOrder = {
-      id: `ord-${Date.now().toString().slice(-4)}`,
-      orderNumber: `UNI-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
-      status: 'CONFIRMED',
-      paymentStatus: 'PAID',
-      paymentMethod: data.paymentMethod,
-      totalAmount,
-      items: data.items,
-      shippingAddress: data.shippingAddress,
-      customerNotes: data.customerNotes,
-      trackingNumber: `UNI-AIR-${Math.floor(100000 + Math.random() * 900000)}`,
-      carrier: 'BlueDart Atelier Courier',
-      estimatedDelivery: 'In 3–5 Business Days',
-      createdAt: new Date().toISOString(),
+    return {
+      success: false,
+      message: res.message || 'Unable to register order with the atelier database.',
     }
-    setOrders((prev) => [fallbackOrder, ...prev])
-    return { success: true, order: fallbackOrder }
   }
 
   // Cancel Order
@@ -541,6 +563,19 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
   const getOrderById = (orderId: string) => {
     return orders.find((o) => o.id === orderId || o.orderNumber === orderId)
   }
+
+  // Public live consignment tracker
+  const trackConsignment = useCallback(async (orderNumber: string) => {
+    const trimmed = (orderNumber || '').trim()
+    if (!trimmed) {
+      return { success: false, message: 'Please provide an order reference or waybill number.' }
+    }
+    const res = await api.get(`/orders/track/${encodeURIComponent(trimmed)}`)
+    if (res.success && res.data) {
+      return { success: true, data: res.data }
+    }
+    return { success: false, message: res.message || 'No consignment found with this reference number.' }
+  }, [])
 
   // Save Bespoke 3D Design
   const saveBespokeDesign = async (design: Omit<CustomerSavedDesign, 'id' | 'createdAt'>) => {
@@ -698,6 +733,7 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
         cancelOrder,
         markOrderReceived,
         getOrderById,
+        trackConsignment,
         savedDesigns,
         refreshSavedDesigns,
         saveBespokeDesign,
