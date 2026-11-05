@@ -1,182 +1,142 @@
 'use client'
 
-import React, { createContext, useContext, useState, useEffect } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { AdminUser, UserRole } from './admin-types'
+import { api, errorMessage, hasSessionHint, SESSION_EXPIRED_EVENT } from '@/lib/api-client'
 
 interface AdminAuthContextType {
   currentUser: AdminUser | null
+  /** @deprecated sessions are cookie based; kept for compatibility */
   token: string | null
   isAuthenticated: boolean
+  /** Signed in, but with a customer account. */
+  isForbidden: boolean
   role: UserRole
   login: (email: string, password: string) => Promise<{ success: boolean; message?: string }>
-  logout: () => void
-  // Granular RBAC capabilities
+  logout: () => Promise<void>
   isAdmin: boolean
   isStaff: boolean
   canManageUsers: boolean
   canViewAuditLogs: boolean
   canDeleteProducts: boolean
+  canDeleteMedia: boolean
+  canManagePayments: boolean
+  canManageCoupons: boolean
+  canViewRevenue: boolean
   canManageOrders: boolean
   canManageWorkshop: boolean
   canManageInquiries: boolean
   canModerateReviews: boolean
 }
 
-const STORAGE_TOKEN_KEY = 'unifort_admin_token'
-const STORAGE_USER_KEY = 'unifort_admin_user'
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
-
 export const AdminAuthContext = createContext<AdminAuthContextType | undefined>(undefined)
+
+const toAdminUser = (u: any): AdminUser => ({
+  id: u.id,
+  name: `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email,
+  email: u.email,
+  role: u.role as UserRole,
+  phone: u.phone,
+  token: '',
+  isActive: true,
+  createdAt: u.createdAt || new Date().toISOString(),
+})
 
 export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
   const [currentUser, setCurrentUser] = useState<AdminUser | null>(null)
-  const [token, setToken] = useState<string | null>(null)
+  const [isForbidden, setIsForbidden] = useState(false)
   const [isLoaded, setIsLoaded] = useState(false)
 
-  // Initialize from sessionStorage on client load (no mock default)
-  useEffect(() => {
-    try {
-      const savedToken = sessionStorage.getItem(STORAGE_TOKEN_KEY)
-      const savedUser = sessionStorage.getItem(STORAGE_USER_KEY)
-      if (savedToken && savedUser) {
-        const parsedUser: AdminUser = JSON.parse(savedUser)
-        // Verify role eligibility
-        if (parsedUser.role === 'ADMIN' || parsedUser.role === 'STAFF') {
-          setCurrentUser(parsedUser)
-          setToken(savedToken)
-        } else {
-          sessionStorage.removeItem(STORAGE_TOKEN_KEY)
-          sessionStorage.removeItem(STORAGE_USER_KEY)
-        }
-      }
-    } catch {
-      sessionStorage.removeItem(STORAGE_TOKEN_KEY)
-      sessionStorage.removeItem(STORAGE_USER_KEY)
-    } finally {
-      setIsLoaded(true)
+  const applyUser = useCallback((u: any | null) => {
+    if (u && (u.role === 'ADMIN' || u.role === 'STAFF')) {
+      setCurrentUser(toAdminUser(u))
+      setIsForbidden(false)
+    } else {
+      setCurrentUser(null)
+      setIsForbidden(!!u)
     }
   }, [])
 
-  const login = async (
-    email: string,
-    password: string
-  ): Promise<{ success: boolean; message?: string }> => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({
-          email: email.trim().toLowerCase(),
-          password,
-        }),
-      })
-
-      const data = await response.json().catch(() => null)
-
-      if (!response.ok || !data?.success) {
-        const errMsg = data?.message || 'Invalid email or password credentials'
-        return { success: false, message: errMsg }
+  // The role always comes from the server; nothing is trusted from browser storage.
+  useEffect(() => {
+    ;(async () => {
+      if (hasSessionHint()) {
+        const res = await api.get('/auth/me')
+        applyUser(res.success ? res.data : null)
       }
+      setIsLoaded(true)
+    })()
+  }, [applyUser])
 
-      const user = data.data?.user
-      const authToken = data.data?.token
+  useEffect(() => {
+    const onExpired = () => setCurrentUser(null)
+    window.addEventListener(SESSION_EXPIRED_EVENT, onExpired)
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onExpired)
+  }, [])
 
-      if (!user || !authToken) {
-        return { success: false, message: 'Authentication response was missing user or token.' }
-      }
-
-      // Check role clearance for admin portal
-      if (user.role !== 'ADMIN' && user.role !== 'STAFF') {
-        return {
-          success: false,
-          message:
-            'Access Denied: The UNIFORT Atelier Admin Console is restricted to Administrator and Staff accounts only.',
-        }
-      }
-
-      const adminUser: AdminUser = {
-        id: user.id,
-        name:
-          `${user.firstName || ''} ${user.lastName || ''}`.trim() ||
-          user.email ||
-          'Atelier Operator',
-        email: user.email,
-        role: user.role as UserRole,
-        phone: user.phone,
-        token: authToken,
-        isActive: true,
-        createdAt: user.createdAt || new Date().toISOString(),
-      }
-
-      setCurrentUser(adminUser)
-      setToken(authToken)
-
-      sessionStorage.setItem(STORAGE_TOKEN_KEY, authToken)
-      sessionStorage.setItem(STORAGE_USER_KEY, JSON.stringify(adminUser))
-      localStorage.setItem(STORAGE_TOKEN_KEY, authToken)
-      localStorage.setItem(STORAGE_USER_KEY, JSON.stringify(adminUser))
-
-      return { success: true }
-    } catch (err: any) {
-      return {
-        success: false,
-        message:
-          err?.message && err.message.includes('Failed to fetch')
-            ? 'Unable to connect to UNIFORT API at http://localhost:5000. Please verify the backend service is running.'
-            : err?.message || 'Authentication error encountered.',
-      }
+  const login = async (email: string, password: string) => {
+    const res = await api.post('/auth/login', { email: email.trim().toLowerCase(), password })
+    if (!res.success || !res.data?.user) return { success: false, message: errorMessage(res, 'Invalid email or password') }
+    const u = res.data.user
+    if (u.role !== 'ADMIN' && u.role !== 'STAFF') {
+      await api.post('/auth/logout')
+      return { success: false, message: 'This console is restricted to staff and administrator accounts.' }
     }
+    applyUser(u)
+    return { success: true }
   }
 
-  const logout = () => {
+  const logout = async () => {
+    await api.post('/auth/logout')
     setCurrentUser(null)
-    setToken(null)
-    try {
-      sessionStorage.removeItem(STORAGE_TOKEN_KEY)
-      sessionStorage.removeItem(STORAGE_USER_KEY)
-      localStorage.removeItem(STORAGE_TOKEN_KEY)
-      localStorage.removeItem(STORAGE_USER_KEY)
-    } catch {
-      // Ignore storage errors
-    }
+    setIsForbidden(false)
   }
 
-  const role = currentUser?.role || 'CUSTOMER'
+  const role: UserRole = currentUser?.role || 'CUSTOMER'
   const isAdmin = role === 'ADMIN'
-  const isStaff = role === 'STAFF' || role === 'ADMIN'
-
-  const value: AdminAuthContextType = {
-    currentUser,
-    token,
-    isAuthenticated: !!currentUser && !!token,
-    role,
-    login,
-    logout,
-    isAdmin,
-    isStaff,
-    canManageUsers: isAdmin,
-    canViewAuditLogs: isAdmin,
-    canDeleteProducts: isAdmin,
-    canManageOrders: isStaff,
-    canManageWorkshop: isStaff,
-    canManageInquiries: isStaff,
-    canModerateReviews: isStaff,
-  }
+  const isStaff = role === 'STAFF' || isAdmin
 
   if (!isLoaded) {
-    return null
+    return (
+      <div className="min-h-screen flex items-center justify-center" aria-busy="true">
+        <div className="w-8 h-8 rounded-full border-2 border-[#424a70] border-t-transparent animate-spin" />
+      </div>
+    )
   }
 
-  return <AdminAuthContext.Provider value={value}>{children}</AdminAuthContext.Provider>
+  return (
+    <AdminAuthContext.Provider
+      value={{
+        currentUser,
+        token: null,
+        isAuthenticated: !!currentUser,
+        isForbidden,
+        role,
+        login,
+        logout,
+        isAdmin,
+        isStaff,
+        // Mirrors the backend RBAC rules
+        canManageUsers: isAdmin,
+        canViewAuditLogs: isAdmin,
+        canDeleteProducts: isAdmin,
+        canDeleteMedia: isAdmin,
+        canManagePayments: isAdmin,
+        canManageCoupons: isAdmin,
+        canViewRevenue: isAdmin,
+        canManageOrders: isStaff,
+        canManageWorkshop: isStaff,
+        canManageInquiries: isStaff,
+        canModerateReviews: isStaff,
+      }}
+    >
+      {children}
+    </AdminAuthContext.Provider>
+  )
 }
 
 export function useAdminAuth() {
   const context = useContext(AdminAuthContext)
-  if (!context) {
-    throw new Error('useAdminAuth must be used within an AdminAuthProvider')
-  }
+  if (!context) throw new Error('useAdminAuth must be used within an AdminAuthProvider')
   return context
 }

@@ -18,26 +18,12 @@ import {
   SlidersHorizontal,
 } from 'lucide-react'
 import { useAdminAuth } from '../admin-auth-context'
-import { OrderRecord, OrderStatus, PaymentStatus } from '../admin-types'
+import { OrderRecord } from '../admin-types'
 import { api } from '../../../lib/api-client'
-import { GlassDropdown, GlassDropdownOption } from '../../ui/GlassDropdown'
+import { OrderDetailModal, mapAdminOrder } from './OrderDetailModal'
+import { useDebounced, Spinner } from '../admin-ui'
 import { AdminPagination } from '../AdminPagination'
 
-const fulfillmentOptions: GlassDropdownOption[] = [
-  { value: 'PENDING', label: 'PENDING', description: 'Order created, awaiting confirmation' },
-  { value: 'CONFIRMED', label: 'CONFIRMED', description: 'Verified and queued for workshop packing' },
-  { value: 'PROCESSING', label: 'PROCESSING', description: 'Ceramic selection and tactile inspection' },
-  { value: 'SHIPPED', label: 'SHIPPED', description: 'Dispatched via premium courier' },
-  { value: 'DELIVERED', label: 'DELIVERED', description: 'Safely delivered to patron residence' },
-  { value: 'CANCELLED', label: 'CANCELLED', description: 'Order cancelled' },
-]
-
-const paymentOptions: GlassDropdownOption[] = [
-  { value: 'PENDING', label: 'PENDING', description: 'Awaiting payment verification' },
-  { value: 'PAID', label: 'PAID', description: 'Funds successfully settled' },
-  { value: 'FAILED', label: 'FAILED', description: 'Transaction declined' },
-  { value: 'REFUNDED', label: 'REFUNDED', description: 'Funds reversed to original source' },
-]
 
 export function OrdersView() {
   const { canManageOrders } = useAdminAuth()
@@ -55,6 +41,7 @@ export function OrdersView() {
   const [customEndDate, setCustomEndDate] = useState('')
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'amount_desc' | 'amount_asc'>('newest')
   const [showMobileFilters, setShowMobileFilters] = useState(false)
+  const debouncedSearch = useDebounced(searchQuery)
 
   // Pagination state
   const [page, setPage] = useState(1)
@@ -107,61 +94,16 @@ export function OrdersView() {
       if (paymentFilter !== 'ALL') queryParams.set('paymentStatus', paymentFilter)
       if (bespokeFilter === 'BESPOKE_ONLY') queryParams.set('hasBespoke', 'true')
       if (bespokeFilter === 'STANDARD_ONLY') queryParams.set('hasBespoke', 'false')
-      if (searchQuery.trim()) queryParams.set('search', searchQuery.trim())
+      if (debouncedSearch.trim()) queryParams.set('search', debouncedSearch.trim())
       if (startDate) queryParams.set('startDate', startDate)
       if (endDate) queryParams.set('endDate', endDate)
       queryParams.set('sortBy', sortBy)
 
-      const res = await api.get(`/orders/admin/all?${queryParams.toString()}`, {}, true)
+      const res = await api.get(`/orders/admin/all?${queryParams.toString()}`)
 
       if (res.success && res.data) {
         const rawList = Array.isArray(res.data) ? res.data : (res.data.orders || [])
-        const mapped: OrderRecord[] = rawList.map((o: any) => ({
-          id: o.id,
-          orderNumber: o.orderNumber,
-          userId: o.userId,
-          user: o.user
-            ? {
-                name: `${o.user.firstName || ''} ${o.user.lastName || ''}`.trim() || o.customerName || 'Patron',
-                email: o.user.email || o.customerEmail || '',
-              }
-            : undefined,
-          status: o.status,
-          paymentStatus: o.paymentStatus,
-          totalAmount: Number(o.totalAmount || 0),
-          currency: o.currency || 'INR',
-          shippingAddress: {
-            fullName:
-              o.shippingAddress?.recipientName ||
-              o.shippingAddress?.fullName ||
-              o.customerName ||
-              'Patron Consignee',
-            addressLine1: o.shippingAddress?.addressLine1 || '',
-            city: o.shippingAddress?.city || '',
-            state: o.shippingAddress?.state || '',
-            postalCode: o.shippingAddress?.postalCode || '',
-            country: o.shippingAddress?.country || 'India',
-          },
-          customerNotes: o.notes || undefined,
-          createdAt: o.createdAt,
-          updatedAt: o.updatedAt,
-          items: (o.items || []).map((it: any) => ({
-            id: it.id,
-            productId: it.productId,
-            product: it.product
-              ? {
-                  name: it.productName || it.product.name,
-                  sku: it.product.sku,
-                  price: Number(it.price || it.product.price || 0),
-                }
-              : undefined,
-            quantity: it.quantity,
-            unitPrice: Number(it.price || 0),
-            customDesignId: it.customDesignId || undefined,
-            customSnapshotUrl: it.customSnapshotUrl || it.customDesign?.thumbnailUrl || undefined,
-            productionSpec: it.productionSpec,
-          })),
-        }))
+        const mapped: OrderRecord[] = rawList.map(mapAdminOrder)
 
         setOrders(mapped)
 
@@ -194,7 +136,7 @@ export function OrdersView() {
     statusFilter,
     paymentFilter,
     bespokeFilter,
-    searchQuery,
+    debouncedSearch,
     getDateRangeParams,
     sortBy,
   ])
@@ -203,28 +145,9 @@ export function OrdersView() {
     fetchOrders()
   }, [fetchOrders])
 
-  const handleUpdateStatus = async (newStatus: OrderStatus) => {
-    if (!selectedOrder) return
-    const updated: OrderRecord = {
-      ...selectedOrder,
-      status: newStatus,
-      updatedAt: new Date().toISOString(),
-    }
-    setOrders((prev) => prev.map((o) => (o.id === selectedOrder.id ? updated : o)))
+  const handleOrderUpdated = (updated: OrderRecord) => {
+    setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)))
     setSelectedOrder(updated)
-    await api.patch(`/orders/${selectedOrder.id}/status`, { status: newStatus }, {}, true)
-  }
-
-  const handleUpdatePayment = async (newPayment: PaymentStatus) => {
-    if (!selectedOrder) return
-    const updated: OrderRecord = {
-      ...selectedOrder,
-      paymentStatus: newPayment,
-      updatedAt: new Date().toISOString(),
-    }
-    setOrders((prev) => prev.map((o) => (o.id === selectedOrder.id ? updated : o)))
-    setSelectedOrder(updated)
-    await api.patch(`/orders/${selectedOrder.id}/payment`, { paymentStatus: newPayment }, {}, true)
   }
 
   // Active filter count
@@ -340,12 +263,13 @@ export function OrdersView() {
               className="w-full px-3 py-2 adm-input border rounded-xl text-xs adm-text-primary focus:outline-none focus:border-[#424a70] transition-colors cursor-pointer"
             >
               <option value="ALL">All Fulfillment Statuses</option>
-              <option value="PENDING">PENDING (Awaiting Confirmation)</option>
+              <option value="PENDING">PENDING (Awaiting online payment)</option>
               <option value="CONFIRMED">CONFIRMED (Queued for Atelier)</option>
               <option value="PROCESSING">PROCESSING (Tactile Quality Check)</option>
               <option value="SHIPPED">SHIPPED (In Transit)</option>
               <option value="DELIVERED">DELIVERED (Fulfilled)</option>
               <option value="CANCELLED">CANCELLED</option>
+              <option value="REFUNDED">REFUNDED</option>
             </select>
           </div>
 
@@ -556,7 +480,9 @@ export function OrdersView() {
       </div>
 
       {/* Orders List / Empty State */}
-      {orders.length === 0 ? (
+      {loading && orders.length === 0 ? (
+        <div className="adm-card border adm-border rounded-2xl"><Spinner /></div>
+      ) : orders.length === 0 ? (
         <div className="p-12 rounded-2xl adm-card border adm-border flex flex-col items-center justify-center text-center">
           <div className="w-12 h-12 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center mb-3">
             <ShoppingBag className="w-6 h-6 text-blue-500 dark:text-blue-400" />
@@ -614,7 +540,7 @@ export function OrdersView() {
                           <span className="font-medium adm-text-primary">
                             {order.shippingAddress.fullName}
                           </span>
-                          <span className="text-[10px] adm-text-muted font-mono">{order.user?.email}</span>
+                          <span className="text-[10px] adm-text-muted font-mono">{order.customerEmail}{order.userId ? '' : ' · guest'}</span>
                         </div>
                       </td>
                       <td className="py-3.5 px-4">
@@ -635,7 +561,8 @@ export function OrdersView() {
                         </div>
                       </td>
                       <td className="py-3.5 px-4 font-mono font-semibold adm-text-primary">
-                        ₹{order.totalAmount}
+                        ₹{order.totalAmount.toLocaleString('en-IN')}
+                        <span className="block text-[9px] adm-text-muted font-sans font-normal">{order.paymentMethod === 'COD' ? 'COD' : 'Online'}</span>
                       </td>
                       <td className="py-3.5 px-4">
                         <span
@@ -705,133 +632,8 @@ export function OrdersView() {
         </div>
       )}
 
-      {/* Order Details & Management Drawer / Modal */}
       {isDetailsModalOpen && selectedOrder && (
-        <div className="fixed inset-0 adm-modal-overlay backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="w-full max-w-2xl adm-modal-bg border rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="p-5 border-b adm-border flex items-center justify-between">
-              <div>
-                <span className="text-[10px] uppercase tracking-wider text-blue-600 dark:text-blue-300 font-medium font-mono">
-                  {selectedOrder.orderNumber}
-                </span>
-                <h3 className="text-base font-serif font-medium adm-text-primary">
-                  Order Fulfillment & Production Manifest
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsDetailsModalOpen(false)}
-                className="p-1.5 rounded-lg adm-text-muted hover:adm-text-primary"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="p-5 space-y-5 overflow-y-auto flex-1">
-              {/* Order Status Controls */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 adm-card-subtle border adm-border rounded-xl">
-                <GlassDropdown
-                  label="Fulfillment Status"
-                  options={fulfillmentOptions}
-                  value={selectedOrder.status}
-                  onChange={(val) => handleUpdateStatus(val as OrderStatus)}
-                />
-
-                <GlassDropdown
-                  label="Payment Status"
-                  options={paymentOptions}
-                  value={selectedOrder.paymentStatus}
-                  onChange={(val) => handleUpdatePayment(val as PaymentStatus)}
-                />
-              </div>
-
-              {/* Items in this order */}
-              <div>
-                <h4 className="text-xs uppercase tracking-wider adm-text-muted font-medium mb-2.5">
-                  Purchased Items ({selectedOrder.items.length})
-                </h4>
-                <div className="space-y-2">
-                  {selectedOrder.items.map((item) => (
-                    <div
-                      key={item.id}
-                      className="p-3 adm-card-subtle border adm-border rounded-xl flex items-center justify-between text-xs"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-black/5 dark:bg-white/5 border adm-border flex items-center justify-center overflow-hidden shrink-0">
-                          {item.customSnapshotUrl ? (
-                            <img
-                              src={item.customSnapshotUrl}
-                              alt="Bespoke snapshot"
-                              className="w-full h-full object-cover"
-                            />
-                          ) : item.customDesignId ? (
-                            <Sparkles className="w-5 h-5 text-purple-500 dark:text-purple-400" />
-                          ) : (
-                            <FileText className="w-5 h-5 adm-text-muted" />
-                          )}
-                        </div>
-                        <div>
-                          <span className="font-medium adm-text-primary block">
-                            {item.product?.name || 'Tableware Piece'}
-                          </span>
-                          <span className="text-[10px] adm-text-muted font-mono">
-                            Qty: {item.quantity} · SKU: {item.product?.sku || 'UNI-PIECE'}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="text-right">
-                        <span className="font-mono adm-text-primary font-semibold">₹{item.unitPrice}</span>
-                        {item.customDesignId && (
-                          <span className="block text-[9px] uppercase tracking-wider text-purple-600 dark:text-purple-300 font-medium">
-                            300 DPI Atelier Piece
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Shipping Address & Customer Care Notes (Strictly non-italic) */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                <div className="p-3.5 adm-card-subtle border adm-border rounded-xl">
-                  <span className="text-[10px] uppercase tracking-wider adm-text-muted block mb-1">
-                    Shipping Destination
-                  </span>
-                  <div className="adm-text-secondary leading-relaxed">
-                    <p className="font-medium adm-text-primary">{selectedOrder.shippingAddress.fullName}</p>
-                    <p>{selectedOrder.shippingAddress.addressLine1}</p>
-                    <p>
-                      {selectedOrder.shippingAddress.city}, {selectedOrder.shippingAddress.state} -{' '}
-                      {selectedOrder.shippingAddress.postalCode}
-                    </p>
-                    <p>{selectedOrder.shippingAddress.country}</p>
-                  </div>
-                </div>
-
-                <div className="p-3.5 adm-card-subtle border adm-border rounded-xl">
-                  <span className="text-[10px] uppercase tracking-wider adm-text-muted block mb-1">
-                    Customer Care Notes
-                  </span>
-                  <p className="adm-text-secondary not-italic text-xs leading-relaxed">
-                    {selectedOrder.customerNotes || 'No special instructions provided by customer.'}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-4 border-t adm-border flex items-center justify-end">
-              <button
-                type="button"
-                onClick={() => setIsDetailsModalOpen(false)}
-                className="px-4 py-2.5 adm-btn-primary rounded-xl text-xs cursor-pointer"
-              >
-                Close Manifest
-              </button>
-            </div>
-          </div>
-        </div>
+        <OrderDetailModal order={selectedOrder} onClose={() => setIsDetailsModalOpen(false)} onUpdated={handleOrderUpdated} />
       )}
     </div>
   )

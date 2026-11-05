@@ -10,7 +10,7 @@ interface SaveDesignDialogProps {
   defaultTitle: string
   thumbnailUrl: string
   onClose: () => void
-  onSave: (title: string) => void
+  onSave: (title: string) => void | Promise<void>
 }
 
 export function SaveDesignDialog({
@@ -28,12 +28,16 @@ export function SaveDesignDialog({
     setMounted(true)
   }, [])
 
+  useEffect(() => {
+    if (isOpen) setTitle(defaultTitle || 'My design')
+  }, [isOpen, defaultTitle])
+
   if (!isOpen || !mounted) return null
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!title.trim()) return
-    onSave(title.trim())
+    await onSave(title.trim())
     setSavedSuccess(true)
     setTimeout(() => {
       setSavedSuccess(false)

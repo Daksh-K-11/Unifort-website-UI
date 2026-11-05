@@ -1,11 +1,15 @@
 'use client'
 
-import React, { useState } from 'react'
-import { X, Lock, Mail, User, Phone, ArrowRight, Loader2, Sparkles } from 'lucide-react'
-import { useCustomer } from '@/lib/customer-context'
+import React, { useEffect, useState } from 'react'
+import Link from 'next/link'
+import { passwordProblem, PASSWORD_HINT } from './AuthForms'
+import { X, Lock, Mail, User, Phone, ArrowRight, Loader2 } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { isStaffRole, useCustomer } from '@/lib/customer-context'
 
 export function CustomerAuthModal() {
   const { authModalOpen, setAuthModalOpen, login, register } = useCustomer()
+  const router = useRouter()
   const [tab, setTab] = useState<'login' | 'register'>(authModalOpen || 'login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -13,6 +17,21 @@ export function CustomerAuthModal() {
   const [phone, setPhone] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  // Open on the tab that was requested (login / register).
+  useEffect(() => {
+    if (authModalOpen) {
+      setTab(authModalOpen)
+      setError('')
+    }
+  }, [authModalOpen])
+
+  useEffect(() => {
+    if (!authModalOpen) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setAuthModalOpen(null)
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [authModalOpen, setAuthModalOpen])
 
   if (!authModalOpen) return null
 
@@ -22,10 +41,20 @@ export function CustomerAuthModal() {
     setLoading(true)
 
     try {
+      if (tab === 'register') {
+        const problem = passwordProblem(password)
+        if (problem) {
+          setError(problem)
+          return
+        }
+      }
       if (tab === 'login') {
         const res = await login(email, password)
         if (!res.success) {
           setError(res.message || 'Unable to sign in. Please check your credentials.')
+        } else if (isStaffRole(res.role)) {
+          // Staff and admins work in the dashboard, not the customer storefront.
+          router.push('/admin')
         }
       } else {
         const res = await register(name, email, password, phone)
@@ -40,20 +69,13 @@ export function CustomerAuthModal() {
     }
   }
 
-  const handleQuickDemoFill = (roleEmail: string, roleName: string) => {
-    setEmail(roleEmail)
-    setPassword('Customer@12345')
-    setName(roleName)
-    setPhone('+91 98401 23456')
-    setError('')
-  }
-
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-md animate-in fade-in duration-200"
       onClick={() => setAuthModalOpen(null)}
       role="dialog"
       aria-modal="true"
+      aria-labelledby="auth-modal-title"
     >
       <div
         className="w-full max-w-md bg-[#faf9fc] text-[#1c2033] border border-[#424a70]/15 rounded-3xl shadow-2xl p-6 sm:p-8 relative overflow-hidden"
@@ -74,7 +96,7 @@ export function CustomerAuthModal() {
           <span className="text-[10px] uppercase tracking-[0.25em] text-[#424a70] font-semibold block mb-1">
             UNIFORT Tableware Atelier
           </span>
-          <h2 className="text-2xl font-serif font-medium text-[#1c2033]">
+          <h2 id="auth-modal-title" className="text-2xl font-serif font-medium text-[#1c2033]">
             {tab === 'login' ? 'Welcome to Your Atelier' : 'Create Patron Account'}
           </h2>
           <p className="text-xs text-[#424a70]/70 mt-1">
@@ -127,16 +149,17 @@ export function CustomerAuthModal() {
           {tab === 'register' && (
             <>
               <div>
-                <label className="block text-[10px] uppercase tracking-wider text-[#424a70]/80 font-medium mb-1">
+                <label htmlFor="auth-name" className="block text-[10px] uppercase tracking-wider text-[#424a70]/80 font-medium mb-1">
                   Full Name *
                 </label>
                 <div className="relative">
                   <input
+                    id="auth-name"
                     type="text"
                     required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="Elena Vance"
+                    placeholder="Your name"
                     className="w-full pl-9 pr-3.5 py-2.5 bg-white border border-[#424a70]/20 rounded-xl text-xs text-[#1c2033] focus:outline-none focus:border-[#424a70]"
                   />
                   <User className="w-3.5 h-3.5 text-[#424a70]/50 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -144,15 +167,16 @@ export function CustomerAuthModal() {
               </div>
 
               <div>
-                <label className="block text-[10px] uppercase tracking-wider text-[#424a70]/80 font-medium mb-1">
+                <label htmlFor="auth-phone" className="block text-[10px] uppercase tracking-wider text-[#424a70]/80 font-medium mb-1">
                   Mobile Contact
                 </label>
                 <div className="relative">
                   <input
+                    id="auth-phone"
                     type="tel"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    placeholder="+91 98401 23456"
+                    placeholder="+91 …"
                     className="w-full pl-9 pr-3.5 py-2.5 bg-white border border-[#424a70]/20 rounded-xl text-xs text-[#1c2033] focus:outline-none focus:border-[#424a70]"
                   />
                   <Phone className="w-3.5 h-3.5 text-[#424a70]/50 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -162,16 +186,17 @@ export function CustomerAuthModal() {
           )}
 
           <div>
-            <label className="block text-[10px] uppercase tracking-wider text-[#424a70]/80 font-medium mb-1">
+            <label htmlFor="auth-email" className="block text-[10px] uppercase tracking-wider text-[#424a70]/80 font-medium mb-1">
               Email Address *
             </label>
             <div className="relative">
               <input
+                    id="auth-email"
                 type="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="patron@example.com"
+                placeholder="you@example.com"
                 className="w-full pl-9 pr-3.5 py-2.5 bg-white border border-[#424a70]/20 rounded-xl text-xs text-[#1c2033] focus:outline-none focus:border-[#424a70]"
               />
               <Mail className="w-3.5 h-3.5 text-[#424a70]/50 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -179,16 +204,18 @@ export function CustomerAuthModal() {
           </div>
 
           <div>
-            <label className="block text-[10px] uppercase tracking-wider text-[#424a70]/80 font-medium mb-1">
-              Passphrase *
+            <label htmlFor="auth-password" className="block text-[10px] uppercase tracking-wider text-[#424a70]/80 font-medium mb-1">
+              Password *
             </label>
             <div className="relative">
               <input
+                    id="auth-password"
                 type="password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••••••"
+                autoComplete={tab === 'login' ? 'current-password' : 'new-password'}
                 className="w-full pl-9 pr-3.5 py-2.5 bg-white border border-[#424a70]/20 rounded-xl text-xs text-[#1c2033] focus:outline-none focus:border-[#424a70]"
               />
               <Lock className="w-3.5 h-3.5 text-[#424a70]/50 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -212,19 +239,13 @@ export function CustomerAuthModal() {
               </>
             )}
           </button>
+          {tab === 'register' && <p className="text-[10px] text-[#424a70]/70">{PASSWORD_HINT}</p>}
         </form>
 
-        {/* Quick autofill suggestion for testing */}
-        <div className="mt-5 pt-4 border-t border-[#424a70]/10 flex items-center justify-between text-[11px] text-[#424a70]/70">
-          <span>Quick Demo Account:</span>
-          <button
-            type="button"
-            onClick={() => handleQuickDemoFill('elena@vance.design', 'Elena Vance')}
-            className="text-[#424a70] font-semibold hover:underline flex items-center gap-1"
-          >
-            <Sparkles className="w-3 h-3 text-amber-500" />
-            <span>Fill Elena Vance (Patron)</span>
-          </button>
+        <div className="mt-5 pt-4 border-t border-[#424a70]/10 text-[11px] text-[#424a70]/70 text-center">
+          <Link href="/forgot-password" onClick={() => setAuthModalOpen(null)} className="hover:underline">
+            Forgot your password?
+          </Link>
         </div>
       </div>
     </div>

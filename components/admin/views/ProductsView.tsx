@@ -1,1443 +1,566 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import Image from 'next/image'
-import {
-  Box,
-  Plus,
-  Search,
-  Sparkles,
-  Trash2,
-  Pencil,
-  X,
-  Lock,
-  Layers,
-  Save,
-  AlertTriangle,
-  Loader2,
-  UploadCloud,
-  Image as ImageIcon,
-  FolderOpen,
-  RefreshCw,
-  Filter,
-  SlidersHorizontal,
-} from 'lucide-react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { Box, Plus, Search, Pencil, Trash2, Upload, X, ArrowUp, ArrowDown, Eye, EyeOff, RefreshCw, Cuboid } from 'lucide-react'
+import { api, formatINR, mediaUrl } from '@/lib/api-client'
 import { useAdminAuth } from '../admin-auth-context'
-import { ProductItem, ItemStatus, ModelType, CategoryItem } from '../admin-types'
-import { api } from '../../../lib/api-client'
-import { GlassDropdown, GlassDropdownOption } from '../../ui/GlassDropdown'
-import { MediaLibraryView } from './MediaLibraryView'
 import { AdminPagination } from '../AdminPagination'
+import { AdminModal, Field, inputCls, notify, Spinner, useDebounced, confirmAction } from '../admin-ui'
+
+type Status = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED'
+
+interface Product {
+  id: string
+  name: string
+  slug: string
+  sku: string | null
+  type: string
+  description: string | null
+  price: number
+  compareAtPrice: number | null
+  image: string
+  gallery: string[]
+  categoryId: string | null
+  categoryName: string
+  category?: { id: string; name: string; slug: string } | null
+  stock: number
+  status: Status
+  isFeatured: boolean
+  isCustomizable: boolean
+  modelType: string | null
+  modelUrl: string | null
+  dimensions: string | null
+  material: string | null
+  careInstructions: string | null
+  rating: number | null
+  reviewCount: number
+}
+
+interface Category {
+  id: string
+  name: string
+  status: Status
+}
+
+const MODEL_TYPES = ['mug', 'plate', 'tumbler', 'bowl', 'carafe', 'tote', 'bottle', 'coaster']
+const LOW_STOCK = 10
+
+const emptyForm = {
+  name: '',
+  slug: '',
+  sku: '',
+  type: '',
+  description: '',
+  price: '',
+  compareAtPrice: '',
+  categoryId: '',
+  stock: '0',
+  status: 'DRAFT' as Status,
+  isFeatured: false,
+  isCustomizable: false,
+  modelType: '',
+  modelUrl: '',
+  dimensions: '',
+  material: '',
+  careInstructions: '',
+  images: [] as string[],
+}
+
+const slugify = (v: string) => v.toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+const statusBadge = (s: Status) =>
+  s === 'PUBLISHED' ? 'bg-emerald-500/15 text-emerald-600' : s === 'DRAFT' ? 'bg-amber-500/15 text-amber-600' : 'bg-slate-500/15 adm-text-muted'
 
 export function ProductsView() {
   const { canDeleteProducts } = useAdminAuth()
-
-  const [products, setProducts] = useState<ProductItem[]>([])
-  const [categories, setCategories] = useState<CategoryItem[]>([])
+  const [products, setProducts] = useState<Product[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
-  const [statusFilter, setStatusFilter] = useState<string>('ALL')
-  const [categoryFilter, setCategoryFilter] = useState<string>('ALL')
-  const [customFilter, setCustomFilter] = useState<string>('ALL')
-  const [stockFilter, setStockFilter] = useState<string>('ALL')
-  const [sortBy, setSortBy] = useState<string>('newest')
-  const [searchQuery, setSearchQuery] = useState('')
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(20)
-  const [showMobileFilters, setShowMobileFilters] = useState(false)
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [meta, setMeta] = useState({ total: 0, totalPages: 1 })
+  const [search, setSearch] = useState('')
+  const debounced = useDebounced(search)
+  const [statusFilter, setStatusFilter] = useState<'ALL' | Status>('ALL')
+  const [categoryFilter, setCategoryFilter] = useState('ALL')
+  const [kindFilter, setKindFilter] = useState<'ALL' | 'STANDARD' | 'CUSTOM'>('ALL')
+  const [lowStockOnly, setLowStockOnly] = useState(false)
+  const [sortBy, setSortBy] = useState('newest')
 
-  // New product form state
-  const [formName, setFormName] = useState('')
-  const [formSlug, setFormSlug] = useState('')
-  const [formSku, setFormSku] = useState('')
-  const [formPrice, setFormPrice] = useState('78')
-  const [formStock, setFormStock] = useState('25')
-  const [formCategory, setFormCategory] = useState('')
-  const [formStatus, setFormStatus] = useState<ItemStatus>('DRAFT')
-  const [formIsCustomizable, setFormIsCustomizable] = useState(false)
-  const [formModelType, setFormModelType] = useState<ModelType>('mug')
-  const [formImage, setFormImage] = useState('/products/unifort-plate-light.jpg')
+  const [editing, setEditing] = useState<Product | null>(null)
+  const [open, setOpen] = useState(false)
+  const [form, setForm] = useState(emptyForm)
+  const [slugTouched, setSlugTouched] = useState(false)
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [saving, setSaving] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const imageInput = useRef<HTMLInputElement>(null)
+  const modelInput = useRef<HTMLInputElement>(null)
 
-  // Edit product form state
-  const [editingProduct, setEditingProduct] = useState<ProductItem | null>(null)
-  const [editName, setEditName] = useState('')
-  const [editSlug, setEditSlug] = useState('')
-  const [editSku, setEditSku] = useState('')
-  const [editPrice, setEditPrice] = useState('78')
-  const [editStock, setEditStock] = useState('25')
-  const [editCategory, setEditCategory] = useState('')
-  const [editStatus, setEditStatus] = useState<ItemStatus>('DRAFT')
-  const [editIsCustomizable, setEditIsCustomizable] = useState(false)
-  const [editModelType, setEditModelType] = useState<ModelType>('mug')
-  const [editDescription, setEditDescription] = useState('')
-  const [editImage, setEditImage] = useState('/products/unifort-plate-light.jpg')
-  const [editErrorMessage, setEditErrorMessage] = useState<string | null>(null)
+  const loadCategories = useCallback(async () => {
+    const res = await api.get<Category[]>('/categories?all=true')
+    if (res.success && Array.isArray(res.data)) setCategories(res.data)
+  }, [])
 
-  // Asset picker state
-  const [isAssetPickerOpen, setIsAssetPickerOpen] = useState(false)
-  const [assetPickerTarget, setAssetPickerTarget] = useState<'create' | 'edit'>('create')
-  const [isUploadingImage, setIsUploadingImage] = useState(false)
-  const createFileInputRef = useRef<HTMLInputElement>(null)
-  const editFileInputRef = useRef<HTMLInputElement>(null)
-
-  const handleUploadProductImage = async (file: File, target: 'create' | 'edit') => {
-    if (!file) return
-    setIsUploadingImage(true)
-    try {
-      const reader = new FileReader()
-      reader.onload = async () => {
-        const base64Data = reader.result as string
-        const res = await api.post(
-          '/media/upload',
-          { data: base64Data, filename: file.name, category: 'product' },
-          {},
-          true
-        )
-        if (res.success && res.data?.url) {
-          if (target === 'create') {
-            setFormImage(res.data.url)
-          } else {
-            setEditImage(res.data.url)
-          }
-        } else {
-          alert(res.message || 'Image upload failed')
-        }
-        setIsUploadingImage(false)
-      }
-      reader.readAsDataURL(file)
-    } catch {
-      setIsUploadingImage(false)
-    }
-  }
-
-  const fetchCatalogData = useCallback(async () => {
+  const load = useCallback(async () => {
     setLoading(true)
-    try {
-      const [prodRes, catRes] = await Promise.all([
-        api.get('/products?limit=100', {}, true),
-        api.get('/categories', {}, true),
-      ])
-
-      if (prodRes.success && Array.isArray(prodRes.data)) {
-        setProducts(
-          prodRes.data.map((p: any) => ({
-            id: p.id,
-            name: p.name,
-            slug: p.slug,
-            sku: p.sku,
-            description: p.description,
-            price: Number(p.price || 0),
-            stock: Number(p.stock || 0),
-            status: p.status as ItemStatus,
-            isCustomizable: !!p.isCustomizable,
-            modelType: p.modelType,
-            categoryId: p.categoryId,
-            category: p.category
-              ? { id: p.category.id, name: p.category.name, slug: p.category.slug }
-              : undefined,
-            images: p.images || [p.image || '/products/unifort-plate-light.jpg'],
-            createdAt: p.createdAt,
-            updatedAt: p.updatedAt,
-          }))
-        )
-      }
-
-      if (catRes.success && Array.isArray(catRes.data)) {
-        setCategories(catRes.data)
-        if (catRes.data.length > 0 && !formCategory) {
-          setFormCategory(catRes.data[0].id)
-        }
-      }
-    } catch (e: any) {
-      console.error('Failed to load products/categories', e)
-    } finally {
-      setLoading(false)
-    }
-  }, [formCategory])
+    const q = new URLSearchParams({ page: String(page), limit: String(limit), sortBy })
+    if (debounced.trim()) q.set('search', debounced.trim())
+    if (statusFilter !== 'ALL') q.set('status', statusFilter)
+    if (categoryFilter !== 'ALL') q.set('category', categoryFilter)
+    if (kindFilter !== 'ALL') q.set('isCustomizable', String(kindFilter === 'CUSTOM'))
+    if (lowStockOnly) q.set('lowStock', 'true')
+    const res = await api.get<Product[]>(`/products?${q}`)
+    if (res.success && Array.isArray(res.data)) {
+      setProducts(res.data)
+      setMeta({ total: res.meta?.total ?? res.data.length, totalPages: res.meta?.totalPages ?? 1 })
+    } else notify(res)
+    setLoading(false)
+  }, [page, limit, sortBy, debounced, statusFilter, categoryFilter, kindFilter, lowStockOnly])
 
   useEffect(() => {
-    fetchCatalogData()
-  }, [fetchCatalogData])
+    loadCategories()
+  }, [loadCategories])
+  useEffect(() => {
+    load()
+  }, [load])
+  useEffect(() => setPage(1), [debounced, statusFilter, categoryFilter, kindFilter, lowStockOnly, sortBy])
 
-  const handleNameChange = (val: string) => {
-    setFormName(val)
-    if (!formSlug || formSlug === formName.toLowerCase().replace(/\s+/g, '-')) {
-      setFormSlug(val.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''))
-    }
+  const set = <K extends keyof typeof emptyForm>(k: K, v: (typeof emptyForm)[K]) => {
+    setForm((f) => ({ ...f, [k]: v }))
+    if (errors[k as string]) setErrors((e) => ({ ...e, [k]: '' }))
   }
 
-  const handleCreateProduct = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!formName || !formSku) return
-
-    setIsSubmitting(true)
-    setErrorMessage(null)
-
-    const chosenCatObj = categories.find((c) => c.id === formCategory) || (categories.length > 0 ? categories[0] : undefined)
-
-    const payload = {
-      name: formName.trim(),
-      slug: formSlug || formName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
-      sku: formSku.trim(),
-      price: Math.max(1, parseFloat(formPrice) || 1),
-      stock: Math.max(0, parseInt(formStock, 10) || 0),
-      status: formStatus,
-      isCustomizable: formIsCustomizable,
-      modelType: formIsCustomizable ? formModelType : undefined,
-      categoryId: chosenCatObj?.id,
-      categoryName: chosenCatObj?.name || 'Tableware',
-      type: 'Ceramic Stoneware',
-      image: formImage || '/products/unifort-plate-light.jpg',
-      gallery: [formImage || '/products/unifort-plate-light.jpg'],
-      description: `${formName} handcrafted by UNIFORT artisans with mineral glazes and tactile surfaces.`,
-    }
-
-    const res = await api.post('/products', payload, {}, true)
-
-    if (res.success && res.data) {
-      const p = res.data
-      const newProd: ProductItem = {
-        id: p.id,
-        name: p.name,
-        slug: p.slug,
-        sku: p.sku,
-        description: p.description,
-        price: Number(p.price || 0),
-        stock: Number(p.stock || 0),
-        status: p.status,
-        isCustomizable: p.isCustomizable,
-        modelType: p.modelType,
-        categoryId: p.categoryId,
-        category: p.category
-          ? { id: p.category.id, name: p.category.name, slug: p.category.slug }
-          : undefined,
-        createdAt: p.createdAt || new Date().toISOString(),
-      }
-      setProducts((prev) => [newProd, ...prev])
-      setIsCreateModalOpen(false)
-
-      // Reset form
-      setFormName('')
-      setFormSlug('')
-      setFormSku('')
-      setFormPrice('78')
-      setFormStock('25')
-      setFormStatus('DRAFT')
-      setFormIsCustomizable(false)
-      notifyProductChange()
-    } else {
-      const errMsg =
-        res.message ||
-        (Array.isArray((res as any).validationErrors)
-          ? (res as any).validationErrors.map((v: any) => `${v.field}: ${v.message}`).join(', ')
-          : 'Failed to create product')
-      setErrorMessage(errMsg)
-    }
-    setIsSubmitting(false)
+  const openCreate = () => {
+    setEditing(null)
+    setForm({ ...emptyForm, categoryId: categories[0]?.id || '' })
+    setSlugTouched(false)
+    setErrors({})
+    setOpen(true)
   }
 
-  const openEditModal = (p: ProductItem) => {
-    setEditingProduct(p)
-    setEditName(p.name)
-    setEditSlug(p.slug)
-    setEditSku(p.sku)
-    setEditPrice(String(p.price))
-    setEditStock(String(p.stock))
-    setEditStatus(p.status)
-    setEditCategory(p.categoryId || (categories.length > 0 ? categories[0].id : ''))
-    setEditIsCustomizable(p.isCustomizable)
-    setEditModelType((p.modelType as ModelType) || 'mug')
-    setEditDescription(p.description || '')
-    setEditImage(p.images?.[0] || '/products/unifort-plate-light.jpg')
-    setEditErrorMessage(null)
+  const openEdit = (p: Product) => {
+    setEditing(p)
+    setForm({
+      name: p.name,
+      slug: p.slug,
+      sku: p.sku || '',
+      type: p.type || '',
+      description: p.description || '',
+      price: String(p.price),
+      compareAtPrice: p.compareAtPrice ? String(p.compareAtPrice) : '',
+      categoryId: p.categoryId || '',
+      stock: String(p.stock),
+      status: p.status,
+      isFeatured: p.isFeatured,
+      isCustomizable: p.isCustomizable,
+      modelType: p.modelType || '',
+      modelUrl: p.modelUrl || '',
+      dimensions: p.dimensions || '',
+      material: p.material || '',
+      careInstructions: p.careInstructions || '',
+      images: [p.image, ...(p.gallery || []).filter((g) => g !== p.image)].filter(Boolean),
+    })
+    setSlugTouched(true)
+    setErrors({})
+    setOpen(true)
   }
 
-  const notifyProductChange = () => {
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('unifort_products_updated'))
-      try {
-        if ('BroadcastChannel' in window) {
-          const channel = new BroadcastChannel('unifort_product_sync')
-          channel.postMessage({ type: 'PRODUCTS_CHANGED' })
-          channel.close()
-        }
-      } catch {}
-    }
+  const upload = async (file: File, kind: 'image' | 'model') => {
+    setUploading(true)
+    const res = await api.upload('/media/upload', file, { category: kind === 'model' ? 'model' : 'product' })
+    setUploading(false)
+    if (!notify(res, kind === 'model' ? '3D model uploaded' : 'Image uploaded')) return
+    if (kind === 'model') set('modelUrl', res.data.url)
+    else setForm((f) => ({ ...f, images: [...f.images, res.data.url] }))
   }
 
-  const handleUpdateProduct = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!editingProduct || !editName || !editSku) return
-
-    setIsSubmitting(true)
-    setEditErrorMessage(null)
-
-    const chosenCatObj = categories.find((c) => c.id === editCategory)
-
-    const payload = {
-      name: editName.trim(),
-      slug: editSlug || editName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
-      sku: editSku.trim(),
-      price: Math.max(1, parseFloat(editPrice) || 1),
-      stock: Math.max(0, parseInt(editStock, 10) || 0),
-      status: editStatus,
-      isCustomizable: editIsCustomizable,
-      modelType: editIsCustomizable ? editModelType : undefined,
-      categoryId: chosenCatObj?.id,
-      categoryName: chosenCatObj?.name,
-      description: editDescription,
-      image: editImage || '/products/unifort-plate-light.jpg',
-      gallery: [editImage || '/products/unifort-plate-light.jpg'],
-    }
-
-    const res = await api.put(`/products/${editingProduct.id}`, payload, {}, true)
-
-    if (res.success && res.data) {
-      const updated = res.data
-      setProducts((prev) =>
-        prev.map((item) =>
-          item.id === editingProduct.id
-            ? {
-                ...item,
-                name: updated.name,
-                slug: updated.slug,
-                sku: updated.sku,
-                price: Number(updated.price),
-                stock: Number(updated.stock),
-                status: updated.status,
-                isCustomizable: updated.isCustomizable,
-                modelType: updated.modelType,
-                categoryId: updated.categoryId,
-                category: updated.category
-                  ? { id: updated.category.id, name: updated.category.name, slug: updated.category.slug }
-                  : undefined,
-                description: updated.description,
-                images: [updated.image || editImage || '/products/unifort-plate-light.jpg'],
-              }
-            : item
-        )
-      )
-      setEditingProduct(null)
-      notifyProductChange()
-    } else {
-      const errMsg =
-        res.message ||
-        (Array.isArray((res as any).validationErrors)
-          ? (res as any).validationErrors.map((v: any) => `${v.field}: ${v.message}`).join(', ')
-          : 'Failed to update product details')
-      setEditErrorMessage(errMsg)
-    }
-    setIsSubmitting(false)
-  }
-
-  const handleToggleStatus = async (id: string, current: ItemStatus) => {
-    const next: ItemStatus = current === 'DRAFT' ? 'PUBLISHED' : current === 'PUBLISHED' ? 'ARCHIVED' : 'DRAFT'
-    setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, status: next } : p)))
-    await api.patch(`/products/${id}/status`, { status: next }, {}, true)
-    notifyProductChange()
-  }
-
-  const handleDeleteProduct = async (id: string) => {
-    if (!canDeleteProducts) return
-    const confirmed = window.confirm('Are you sure you wish to permanently delete this product?')
-    if (!confirmed) return
-    setProducts((prev) => prev.filter((p) => p.id !== id))
-    await api.delete(`/products/${id}`, {}, true)
-    notifyProductChange()
-  }
-
-  // Dropdown options
-  const categoryOptions: GlassDropdownOption[] = useMemo(() => {
-    if (categories.length > 0) {
-      return categories.map((cat) => ({
-        value: cat.id,
-        label: cat.name,
-      }))
-    }
-    return [
-      { value: 'cat-table', label: 'Table & Dinnerware' },
-      { value: 'cat-glass', label: 'Glass & Drinkware' },
-      { value: 'cat-objects', label: 'Objects & Decor' },
-    ]
-  }, [categories])
-
-  const statusOptions: GlassDropdownOption[] = [
-    { value: 'DRAFT', label: 'DRAFT (Admin Drafts Everything)', description: 'Hidden from public storefront' },
-    { value: 'PUBLISHED', label: 'PUBLISHED (Live in store)', description: 'Visible to patrons' },
-    { value: 'ARCHIVED', label: 'ARCHIVED', description: 'Decommissioned piece' },
-  ]
-
-  const modelTypeOptions: GlassDropdownOption[] = [
-    { value: 'mug', label: 'Ceramic Mug (3 surfaces)' },
-    { value: 'plate', label: 'Dinner Plate (2 surfaces)' },
-    { value: 'tumbler', label: 'Glass Tumbler (2 surfaces)' },
-    { value: 'bowl', label: 'Serving Bowl (2 surfaces)' },
-    { value: 'carafe', label: 'Studio Carafe (2 surfaces)' },
-    { value: 'tote', label: 'Linen Tote (2 surfaces)' },
-    { value: 'bottle', label: 'Travel Tumbler (2 surfaces)' },
-    { value: 'coaster', label: 'Ceramic Coaster Set (1 surface)' },
-  ]
-
-  const filteredAndSortedProducts = useMemo(() => {
-    const list = products.filter((p) => {
-      const matchesStatus = statusFilter === 'ALL' || p.status === statusFilter
-      const matchesCategory =
-        categoryFilter === 'ALL' ||
-        p.categoryId === categoryFilter ||
-        (p.category?.name && p.category.name.toLowerCase() === categoryFilter.toLowerCase())
-      const matchesCustom =
-        customFilter === 'ALL' ||
-        (customFilter === 'CUSTOMIZABLE' ? p.isCustomizable : !p.isCustomizable)
-      const matchesStock =
-        stockFilter === 'ALL' ||
-        (stockFilter === 'IN_STOCK'
-          ? p.stock > 0
-          : stockFilter === 'LOW_STOCK'
-          ? p.stock > 0 && p.stock < 10
-          : p.stock <= 0)
-      const matchesSearch =
-        !searchQuery.trim() ||
-        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (p.sku && p.sku.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (p.slug && p.slug.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (p.category?.name && p.category.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (p.description && p.description.toLowerCase().includes(searchQuery.toLowerCase()))
-      return matchesStatus && matchesCategory && matchesCustom && matchesStock && matchesSearch
+  const moveImage = (i: number, dir: -1 | 1) =>
+    setForm((f) => {
+      const imgs = [...f.images]
+      const j = i + dir
+      if (j < 0 || j >= imgs.length) return f
+      ;[imgs[i], imgs[j]] = [imgs[j], imgs[i]]
+      return { ...f, images: imgs }
     })
 
-    list.sort((a, b) => {
-      if (sortBy === 'price_asc') return a.price - b.price
-      if (sortBy === 'price_desc') return b.price - a.price
-      if (sortBy === 'name') return a.name.localeCompare(b.name)
-      if (sortBy === 'stock_asc') return a.stock - b.stock
-      if (sortBy === 'oldest') {
-        const da = a.createdAt ? new Date(a.createdAt).getTime() : 0
-        const db = b.createdAt ? new Date(b.createdAt).getTime() : 0
-        return da - db
-      }
-      // default: newest
-      const da = a.createdAt ? new Date(a.createdAt).getTime() : 0
-      const db = b.createdAt ? new Date(b.createdAt).getTime() : 0
-      return db - da
-    })
+  const save = async () => {
+    const errs: Record<string, string> = {}
+    if (!form.name.trim()) errs.name = 'Name is required'
+    if (!(Number(form.price) > 0)) errs.price = 'Enter a price greater than 0'
+    if (form.compareAtPrice && Number(form.compareAtPrice) <= Number(form.price)) errs.compareAtPrice = 'Must be higher than the price'
+    if (!Number.isInteger(Number(form.stock)) || Number(form.stock) < 0) errs.stock = 'Stock must be a whole number ≥ 0'
+    if (form.isCustomizable && !form.modelType) errs.modelType = 'Choose the 3D model type'
+    if (form.status === 'PUBLISHED' && form.images.length === 0) errs.images = 'Add at least one image before publishing'
+    setErrors(errs)
+    if (Object.keys(errs).length) return
 
-    return list
-  }, [products, statusFilter, categoryFilter, customFilter, stockFilter, searchQuery, sortBy])
+    const payload = {
+      name: form.name.trim(),
+      slug: form.slug.trim() || slugify(form.name),
+      sku: form.sku.trim() || null,
+      type: form.type.trim() || 'Handcrafted tableware',
+      description: form.description.trim() || null,
+      price: Number(form.price),
+      compareAtPrice: form.compareAtPrice ? Number(form.compareAtPrice) : null,
+      categoryId: form.categoryId || null,
+      stock: Number(form.stock),
+      status: form.status,
+      isFeatured: form.isFeatured,
+      isCustomizable: form.isCustomizable,
+      modelType: form.isCustomizable ? form.modelType || null : form.modelType || null,
+      modelUrl: form.modelUrl || null,
+      dimensions: form.dimensions.trim() || null,
+      material: form.material.trim() || null,
+      careInstructions: form.careInstructions.trim() || null,
+      image: form.images[0] || '/products/unifort-plate-light.jpg',
+      gallery: form.images.slice(1),
+    }
+    setSaving(true)
+    const res = editing ? await api.put(`/products/${editing.id}`, payload) : await api.post('/products', payload)
+    setSaving(false)
+    if (notify(res, editing ? 'Product saved' : 'Product created', setErrors)) {
+      setOpen(false)
+      load()
+    }
+  }
 
-  const totalProducts = filteredAndSortedProducts.length
-  const totalPages = Math.ceil(totalProducts / limit) || 1
-  const paginatedProducts = useMemo(() => {
-    const start = (page - 1) * limit
-    return filteredAndSortedProducts.slice(start, start + limit)
-  }, [filteredAndSortedProducts, page, limit])
+  const setStatus = async (p: Product, status: Status) => {
+    const res = await api.patch(`/products/${p.id}/status`, { status })
+    if (notify(res)) setProducts((prev) => prev.map((x) => (x.id === p.id ? { ...x, status } : x)))
+  }
 
-  const activeFilterCount = useMemo(() => {
-    let count = 0
-    if (statusFilter !== 'ALL') count++
-    if (categoryFilter !== 'ALL') count++
-    if (customFilter !== 'ALL') count++
-    if (stockFilter !== 'ALL') count++
-    if (searchQuery.trim()) count++
-    return count
-  }, [statusFilter, categoryFilter, customFilter, stockFilter, searchQuery])
-
-  const handleResetFilters = () => {
-    setStatusFilter('ALL')
-    setCategoryFilter('ALL')
-    setCustomFilter('ALL')
-    setStockFilter('ALL')
-    setSortBy('newest')
-    setSearchQuery('')
-    setPage(1)
+  const remove = async (p: Product) => {
+    if (!confirmAction(`Delete "${p.name}"? Products that have been ordered are archived instead.`)) return
+    const res = await api.delete(`/products/${p.id}`)
+    if (notify(res)) load()
   }
 
   return (
     <div className="space-y-6">
-      {/* Header & Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-serif tracking-tight adm-text-primary font-medium">
-            Products & Drafts Catalog
-          </h2>
-          <p className="text-xs adm-text-muted mt-0.5">
-            Manage permanent stoneware collections, 3D studio customizable pieces, and draft states.
-          </p>
+          <h2 className="text-xl font-serif tracking-tight adm-text-primary font-medium">Products</h2>
+          <p className="text-xs adm-text-muted mt-0.5">Drafts are hidden from the storefront until published.</p>
         </div>
-
-        <div className="flex items-center gap-2 self-start sm:self-auto">
-          <button
-            type="button"
-            onClick={fetchCatalogData}
-            disabled={loading}
-            className="px-3.5 py-2.5 rounded-xl text-xs font-medium adm-card border adm-border adm-text-primary hover:bg-[#424a70]/10 flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
-            title="Refresh catalog"
-          >
+        <div className="flex gap-2 self-start">
+          <button type="button" onClick={load} className="px-3 py-2 rounded-xl border adm-border text-xs inline-flex items-center gap-1.5" aria-label="Refresh">
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-            <span>Refresh</span>
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              setErrorMessage(null)
-              setIsCreateModalOpen(true)
-            }}
-            className="px-4 py-2.5 adm-btn-primary rounded-xl text-xs flex items-center gap-1.5 cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>New Product / Draft</span>
+          <button type="button" onClick={openCreate} className="px-4 py-2.5 adm-btn-primary rounded-xl text-xs inline-flex items-center gap-1.5">
+            <Plus className="w-3.5 h-3.5" /> New product
           </button>
         </div>
       </div>
 
-      {/* Modern Filter Toolbar */}
-      <div className="adm-card border adm-border rounded-2xl p-4 shadow-sm space-y-3.5">
-        {/* Search Bar + Mobile Filters Toggle */}
-        <div className="flex items-center gap-2">
-          {/* Keyword Search */}
-          <div className="relative flex-1">
-            <Search className="w-3.5 h-3.5 adm-text-muted absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value)
-                setPage(1)
-              }}
-              placeholder="Search piece name, SKU, slug..."
-              className="w-full pl-9 pr-8 py-2 adm-input border rounded-xl text-xs adm-text-primary focus:outline-none focus:border-[#424a70] transition-colors"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchQuery('')
-                  setPage(1)
-                }}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-
-          {/* Mobile Filter Toggle Button */}
-          <button
-            type="button"
-            onClick={() => setShowMobileFilters(!showMobileFilters)}
-            className={`sm:hidden px-3 py-2 rounded-xl border text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 ${
-              showMobileFilters || activeFilterCount > 0
-                ? 'tab-active !bg-[#424a70] !text-white border-[#424a70]'
-                : 'adm-card border adm-border adm-text-secondary'
-            }`}
-          >
-            <SlidersHorizontal className="w-3.5 h-3.5" />
-            <span>Filters</span>
-            {activeFilterCount > 0 && (
-              <span className="badge-count w-4 h-4 rounded-full !bg-white !text-[#424a70] text-[10px] font-bold flex items-center justify-center ml-0.5">
-                {activeFilterCount}
-              </span>
-            )}
-          </button>
+      <div className="adm-card border adm-border rounded-2xl p-4 grid gap-3 md:grid-cols-6">
+        <div className="relative md:col-span-2">
+          <Search className="w-3.5 h-3.5 adm-text-muted absolute left-3 top-1/2 -translate-y-1/2" aria-hidden />
+          <label htmlFor="prd-search" className="sr-only">
+            Search products
+          </label>
+          <input id="prd-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, type or SKU…" className={`${inputCls} pl-8`} />
         </div>
+        <select aria-label="Status" className={inputCls} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as any)}>
+          <option value="ALL">All statuses</option>
+          <option value="PUBLISHED">Published</option>
+          <option value="DRAFT">Draft</option>
+          <option value="ARCHIVED">Archived</option>
+        </select>
+        <select aria-label="Category" className={inputCls} value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+          <option value="ALL">All categories</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.name}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+        <select aria-label="Type" className={inputCls} value={kindFilter} onChange={(e) => setKindFilter(e.target.value as any)}>
+          <option value="ALL">Standard &amp; 3D</option>
+          <option value="STANDARD">Standard only</option>
+          <option value="CUSTOM">3D customisable only</option>
+        </select>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-1.5 text-xs adm-text-primary">
+            <input type="checkbox" checked={lowStockOnly} onChange={(e) => setLowStockOnly(e.target.checked)} /> Low stock
+          </label>
+          <select aria-label="Sort" className={inputCls} value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+            <option value="newest">Newest</option>
+            <option value="name">Name</option>
+            <option value="price_asc">Price ↑</option>
+            <option value="price_desc">Price ↓</option>
+            <option value="stock_asc">Stock ↑</option>
+          </select>
+        </div>
+      </div>
 
-        {/* Dropdowns: Collapsible on Mobile, Grid on Tablet/Desktop */}
-        <div className={`${showMobileFilters ? 'grid' : 'hidden sm:grid'} grid-cols-1 sm:grid-cols-3 gap-2.5`}>
-          {/* Status Dropdown */}
-          <div className="relative">
-            <select
-              value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value)
-                setPage(1)
-              }}
-              className="w-full px-3 py-2 adm-input border rounded-xl text-xs adm-text-primary focus:outline-none focus:border-[#424a70] transition-colors cursor-pointer"
-            >
-              <option value="ALL">All Statuses</option>
-              <option value="DRAFT">DRAFT (Drafting State)</option>
-              <option value="PUBLISHED">PUBLISHED (Live in Store)</option>
-              <option value="ARCHIVED">ARCHIVED (Decommissioned)</option>
-            </select>
+      <div className="adm-card border adm-border rounded-2xl overflow-hidden">
+        {loading && products.length === 0 ? (
+          <Spinner />
+        ) : products.length === 0 ? (
+          <div className="p-10 text-center text-sm adm-text-muted">
+            <Box className="w-6 h-6 mx-auto mb-2" /> No products match these filters.
           </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="adm-text-muted text-left">
+                <tr className="border-b adm-border">
+                  <th className="p-3">Product</th>
+                  <th className="p-3">Category</th>
+                  <th className="p-3">Price</th>
+                  <th className="p-3">Stock</th>
+                  <th className="p-3">Status</th>
+                  <th className="p-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {products.map((p) => (
+                  <tr key={p.id} className="border-b adm-border last:border-0">
+                    <td className="p-3">
+                      <div className="flex items-center gap-3">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={mediaUrl(p.image)} alt="" className="w-10 h-10 rounded-lg object-cover bg-black/5" loading="lazy" />
+                        <div className="min-w-0">
+                          <div className="font-medium adm-text-primary truncate max-w-[16rem]">{p.name}</div>
+                          <div className="adm-text-muted font-mono">
+                            {p.sku || '—'} {p.isCustomizable && <span className="ml-1 text-purple-500 font-sans">· 3D {p.modelType}</span>}
+                            {p.isFeatured && <span className="ml-1 text-amber-500 font-sans">· featured</span>}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="p-3">{p.category?.name || p.categoryName}</td>
+                    <td className="p-3 font-mono">
+                      {formatINR(p.price)}
+                      {p.compareAtPrice ? <s className="ml-1 adm-text-muted">{formatINR(p.compareAtPrice)}</s> : null}
+                    </td>
+                    <td className={`p-3 font-mono ${p.stock === 0 ? 'text-red-500' : p.stock <= LOW_STOCK ? 'text-amber-500' : ''}`}>{p.stock}</td>
+                    <td className="p-3">
+                      <span className={`px-2 py-1 rounded-full text-[11px] ${statusBadge(p.status)}`}>{p.status.toLowerCase()}</span>
+                    </td>
+                    <td className="p-3 text-right whitespace-nowrap">
+                      {p.status !== 'PUBLISHED' ? (
+                        <button type="button" onClick={() => setStatus(p, 'PUBLISHED')} className="p-1.5 text-emerald-600" title="Publish" aria-label={`Publish ${p.name}`}>
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                      ) : (
+                        <button type="button" onClick={() => setStatus(p, 'DRAFT')} className="p-1.5 adm-text-muted" title="Unpublish (move to drafts)" aria-label={`Unpublish ${p.name}`}>
+                          <EyeOff className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      <button type="button" onClick={() => openEdit(p)} className="p-1.5 adm-text-muted hover:adm-text-primary" aria-label={`Edit ${p.name}`}>
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      {canDeleteProducts && (
+                        <button type="button" onClick={() => remove(p)} className="p-1.5 text-red-500" aria-label={`Delete ${p.name}`}>
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <AdminPagination
+          page={page}
+          limit={limit}
+          total={meta.total}
+          totalPages={meta.totalPages}
+          onPageChange={setPage}
+          onLimitChange={(l) => {
+            setLimit(l)
+            setPage(1)
+          }}
+          itemName="products"
+        />
+      </div>
 
-          {/* Dynamic Category Dropdown */}
-          <div className="relative">
-            <select
-              value={categoryFilter}
+      <AdminModal
+        open={open}
+        wide
+        title={editing ? `Edit ${editing.name}` : 'New product'}
+        onClose={() => setOpen(false)}
+        footer={
+          <>
+            <button type="button" onClick={() => setOpen(false)} className="px-4 py-2 rounded-xl border adm-border text-xs">
+              Cancel
+            </button>
+            <button type="button" onClick={save} disabled={saving || uploading} className="px-4 py-2 rounded-xl adm-btn-primary text-xs disabled:opacity-50">
+              {saving ? 'Saving…' : editing ? 'Save changes' : 'Create product'}
+            </button>
+          </>
+        }
+      >
+        <div className="grid sm:grid-cols-2 gap-3">
+          <Field id="pf-name" label="Name" error={errors.name}>
+            <input
+              id="pf-name"
+              className={inputCls}
+              value={form.name}
+              maxLength={150}
               onChange={(e) => {
-                setCategoryFilter(e.target.value)
-                setPage(1)
+                set('name', e.target.value)
+                if (!slugTouched) set('slug', slugify(e.target.value))
               }}
-              className="w-full px-3 py-2 adm-input border rounded-xl text-xs adm-text-primary focus:outline-none focus:border-[#424a70] transition-colors cursor-pointer"
-            >
-              <option value="ALL">All Categories</option>
+            />
+          </Field>
+          <Field id="pf-slug" label="URL slug" error={errors.slug} hint={`/collection/${form.slug || '…'}`}>
+            <input
+              id="pf-slug"
+              className={`${inputCls} font-mono`}
+              value={form.slug}
+              onChange={(e) => {
+                setSlugTouched(true)
+                set('slug', e.target.value)
+              }}
+            />
+          </Field>
+          <Field id="pf-type" label="Type / short descriptor" error={errors.type} hint="e.g. Dinner plate · 28 cm">
+            <input id="pf-type" className={inputCls} value={form.type} onChange={(e) => set('type', e.target.value)} />
+          </Field>
+          <Field id="pf-cat" label="Category" error={errors.categoryId}>
+            <select id="pf-cat" className={inputCls} value={form.categoryId} onChange={(e) => set('categoryId', e.target.value)}>
+              <option value="">— none —</option>
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
+                  {c.status !== 'PUBLISHED' ? ` (${c.status.toLowerCase()})` : ''}
                 </option>
               ))}
             </select>
-          </div>
-
-          {/* 3D Studio Customization Dropdown */}
-          <div className="relative">
-            <select
-              value={customFilter}
-              onChange={(e) => {
-                setCustomFilter(e.target.value)
-                setPage(1)
-              }}
-              className="w-full px-3 py-2 adm-input border rounded-xl text-xs adm-text-primary focus:outline-none focus:border-[#424a70] transition-colors cursor-pointer"
-            >
-              <option value="ALL">All Pieces (3D + Standard)</option>
-              <option value="CUSTOMIZABLE">3D Studio Customizable Only</option>
-              <option value="STANDARD">Standard Tableware Only</option>
-            </select>
-          </div>
+          </Field>
         </div>
 
-        {/* Row 2: Stock Status + Sort Order + Active Filter Badges (Collapsible on Mobile) */}
-        <div className={`${showMobileFilters ? 'flex' : 'hidden sm:flex'} flex-wrap items-center justify-between gap-2.5 pt-2 border-t adm-border`}>
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Stock Status Dropdown */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11px] adm-text-muted font-medium">Stock:</span>
-              <select
-                value={stockFilter}
-                onChange={(e) => {
-                  setStockFilter(e.target.value)
-                  setPage(1)
-                }}
-                className="px-2.5 py-1.5 adm-input border rounded-lg text-xs adm-text-primary focus:outline-none focus:border-[#424a70] cursor-pointer"
-              >
-                <option value="ALL">All Stock Levels</option>
-                <option value="IN_STOCK">In Stock (&gt; 0)</option>
-                <option value="LOW_STOCK">Low Stock (&lt; 10)</option>
-                <option value="OUT_OF_STOCK">Out of Stock (0)</option>
-              </select>
-            </div>
+        <Field id="pf-desc" label="Description" error={errors.description}>
+          <textarea id="pf-desc" rows={4} className={inputCls} value={form.description} onChange={(e) => set('description', e.target.value)} maxLength={5000} />
+        </Field>
 
-            {/* Sort Order Dropdown */}
-            <div className="flex items-center gap-1.5 border-l adm-border pl-2.5">
-              <span className="text-[11px] adm-text-muted font-medium">Sort:</span>
-              <select
-                value={sortBy}
-                onChange={(e) => {
-                  setSortBy(e.target.value)
-                  setPage(1)
-                }}
-                className="px-2.5 py-1.5 adm-input border rounded-lg text-xs adm-text-primary focus:outline-none focus:border-[#424a70] cursor-pointer"
-              >
-                <option value="newest">Newest First</option>
-                <option value="oldest">Oldest First</option>
-                <option value="price_asc">Price: Low to High</option>
-                <option value="price_desc">Price: High to Low</option>
-                <option value="name">Name: A to Z</option>
-                <option value="stock_asc">Stock: Low to High</option>
-              </select>
-            </div>
+        <div className="grid sm:grid-cols-4 gap-3">
+          <Field id="pf-price" label="Price (₹)" error={errors.price}>
+            <input id="pf-price" type="number" min={0} step="0.01" className={inputCls} value={form.price} onChange={(e) => set('price', e.target.value)} />
+          </Field>
+          <Field id="pf-compare" label="Compare-at (₹)" error={errors.compareAtPrice}>
+            <input id="pf-compare" type="number" min={0} step="0.01" className={inputCls} value={form.compareAtPrice} onChange={(e) => set('compareAtPrice', e.target.value)} />
+          </Field>
+          <Field id="pf-stock" label="Stock" error={errors.stock}>
+            <input id="pf-stock" type="number" min={0} step={1} className={inputCls} value={form.stock} onChange={(e) => set('stock', e.target.value)} />
+          </Field>
+          <Field id="pf-sku" label="SKU" error={errors.sku} hint="Auto-generated if empty">
+            <input id="pf-sku" className={`${inputCls} font-mono`} value={form.sku} onChange={(e) => set('sku', e.target.value)} />
+          </Field>
+        </div>
+
+        <div className="grid sm:grid-cols-3 gap-3">
+          <Field id="pf-material" label="Material" error={errors.material}>
+            <input id="pf-material" className={inputCls} value={form.material} onChange={(e) => set('material', e.target.value)} />
+          </Field>
+          <Field id="pf-dims" label="Dimensions" error={errors.dimensions}>
+            <input id="pf-dims" className={inputCls} value={form.dimensions} onChange={(e) => set('dimensions', e.target.value)} />
+          </Field>
+          <Field id="pf-care" label="Care instructions" error={errors.careInstructions}>
+            <input id="pf-care" className={inputCls} value={form.careInstructions} onChange={(e) => set('careInstructions', e.target.value)} />
+          </Field>
+        </div>
+
+        <div>
+          <span className="text-[11px] uppercase tracking-wider adm-text-muted font-medium">Images (first is the main image)</span>
+          {errors.images && <p className="text-[11px] text-red-500">{errors.images}</p>}
+          <div className="flex flex-wrap gap-3 mt-2">
+            {form.images.map((src, i) => (
+              <div key={src + i} className="relative w-24">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={mediaUrl(src)} alt="" className={`w-24 h-24 rounded-lg object-cover ${i === 0 ? 'ring-2 ring-[#424a70]' : ''}`} />
+                <div className="flex justify-between mt-1">
+                  <button type="button" onClick={() => moveImage(i, -1)} disabled={i === 0} className="p-1 disabled:opacity-30" aria-label="Move image left">
+                    <ArrowUp className="w-3 h-3 -rotate-90" />
+                  </button>
+                  <button type="button" onClick={() => setForm((f) => ({ ...f, images: f.images.filter((_, j) => j !== i) }))} className="p-1 text-red-500" aria-label="Remove image">
+                    <X className="w-3 h-3" />
+                  </button>
+                  <button type="button" onClick={() => moveImage(i, 1)} disabled={i === form.images.length - 1} className="p-1 disabled:opacity-30" aria-label="Move image right">
+                    <ArrowDown className="w-3 h-3 -rotate-90" />
+                  </button>
+                </div>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => imageInput.current?.click()}
+              disabled={uploading}
+              className="w-24 h-24 rounded-lg border border-dashed adm-border flex flex-col items-center justify-center text-[11px] adm-text-muted disabled:opacity-50"
+            >
+              <Upload className="w-4 h-4 mb-1" /> {uploading ? 'Uploading…' : 'Add image'}
+            </button>
+            <input
+              ref={imageInput}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/avif"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+                if (f) upload(f, 'image')
+                e.target.value = ''
+              }}
+            />
           </div>
+          <p className="text-[11px] adm-text-muted mt-1">JPEG, PNG, WebP or AVIF up to 10 MB. Images are optimised automatically.</p>
+        </div>
 
-          {/* Active Filter Counter & Reset */}
-          {activeFilterCount > 0 && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-[#424a70] dark:text-indigo-400 font-medium">
-                {activeFilterCount} filter{activeFilterCount > 1 ? 's' : ''} applied
-              </span>
-              <button
-                type="button"
-                onClick={handleResetFilters}
-                className="px-2.5 py-1 text-xs rounded-lg border border-red-500/20 text-red-600 dark:text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-1 cursor-pointer"
-              >
-                <X className="w-3 h-3" />
-                <span>Clear all</span>
-              </button>
+        <div className="p-3 rounded-xl border adm-border space-y-3">
+          <label className="flex items-center gap-2 text-xs adm-text-primary">
+            <input type="checkbox" checked={form.isCustomizable} onChange={(e) => set('isCustomizable', e.target.checked)} />
+            Customisable in the 3D studio
+          </label>
+          {form.isCustomizable && (
+            <div className="grid sm:grid-cols-2 gap-3">
+              <Field id="pf-model" label="3D model type" error={errors.modelType} hint="Determines the 3D shape, printable surfaces and studio pricing">
+                <select id="pf-model" className={inputCls} value={form.modelType} onChange={(e) => set('modelType', e.target.value)}>
+                  <option value="">Choose…</option>
+                  {MODEL_TYPES.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field id="pf-glb" label="Custom .glb model (optional)" error={errors.modelUrl}>
+                <div className="flex gap-2 items-center">
+                  <input id="pf-glb" className={`${inputCls} font-mono`} value={form.modelUrl} onChange={(e) => set('modelUrl', e.target.value)} placeholder="/uploads/…glb" />
+                  <button type="button" onClick={() => modelInput.current?.click()} className="px-2 py-2 rounded-xl border adm-border" aria-label="Upload .glb model">
+                    <Cuboid className="w-4 h-4" />
+                  </button>
+                  <input
+                    ref={modelInput}
+                    type="file"
+                    accept=".glb,model/gltf-binary"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0]
+                      if (f) upload(f, 'model')
+                      e.target.value = ''
+                    }}
+                  />
+                </div>
+              </Field>
             </div>
           )}
         </div>
 
-        {/* Active Filter Badges */}
-        {activeFilterCount > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5 pt-1">
-            {statusFilter !== 'ALL' && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-[#424a70]/10 text-[#424a70] dark:text-[#a0aadb] border border-[#424a70]/20">
-                Status: {statusFilter}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStatusFilter('ALL')
-                    setPage(1)
-                  }}
-                  className="hover:text-red-500"
-                >
-                  <X className="w-2.5 h-2.5" />
-                </button>
-              </span>
-            )}
-            {categoryFilter !== 'ALL' && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
-                Category: {categories.find((c) => c.id === categoryFilter)?.name || categoryFilter}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCategoryFilter('ALL')
-                    setPage(1)
-                  }}
-                  className="hover:text-red-500"
-                >
-                  <X className="w-2.5 h-2.5" />
-                </button>
-              </span>
-            )}
-            {customFilter !== 'ALL' && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-purple-500/15 text-purple-700 dark:text-purple-300 border border-purple-500/30">
-                Studio: {customFilter === 'CUSTOMIZABLE' ? '3D Customizable' : 'Standard'}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCustomFilter('ALL')
-                    setPage(1)
-                  }}
-                  className="hover:text-red-500"
-                >
-                  <X className="w-2.5 h-2.5" />
-                </button>
-              </span>
-            )}
-            {stockFilter !== 'ALL' && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
-                Stock: {stockFilter.replace(/_/g, ' ')}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStockFilter('ALL')
-                    setPage(1)
-                  }}
-                  className="hover:text-red-500"
-                >
-                  <X className="w-2.5 h-2.5" />
-                </button>
-              </span>
-            )}
-            {searchQuery && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30">
-                Search: &quot;{searchQuery}&quot;
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchQuery('')
-                    setPage(1)
-                  }}
-                  className="hover:text-red-500"
-                >
-                  <X className="w-2.5 h-2.5" />
-                </button>
-              </span>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Products Table or Empty State */}
-      {filteredAndSortedProducts.length === 0 ? (
-        <div className="p-12 rounded-2xl adm-card border adm-border flex flex-col items-center justify-center text-center">
-          <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mb-3">
-            <Box className="w-6 h-6 text-amber-500 dark:text-amber-400" />
-          </div>
-          <h3 className="text-base font-medium adm-text-primary">No Products Found</h3>
-          <p className="text-xs adm-text-muted mt-1 max-w-sm">
-            {statusFilter === 'ALL'
-              ? 'No products have been created in this catalog view yet. Use the button below to draft a new piece.'
-              : `No products matching status "${statusFilter}".`}
-          </p>
-          <div className="mt-5">
-            <button
-              type="button"
-              onClick={() => {
-                setErrorMessage(null)
-                setIsCreateModalOpen(true)
-              }}
-              className="px-4 py-2.5 adm-btn-primary rounded-xl text-xs flex items-center gap-1.5 cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Create Product Draft</span>
-            </button>
-          </div>
+        <div className="flex flex-wrap items-center gap-4">
+          <Field id="pf-status" label="Status" error={errors.status}>
+            <select id="pf-status" className={inputCls} value={form.status} onChange={(e) => set('status', e.target.value as Status)}>
+              <option value="DRAFT">Draft (hidden)</option>
+              <option value="PUBLISHED">Published</option>
+              <option value="ARCHIVED">Archived</option>
+            </select>
+          </Field>
+          <label className="flex items-center gap-2 text-xs adm-text-primary mt-4">
+            <input type="checkbox" checked={form.isFeatured} onChange={(e) => set('isFeatured', e.target.checked)} /> Featured on home page
+          </label>
         </div>
-      ) : (
-        <div className="adm-card border adm-border rounded-2xl overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b adm-border adm-table-head text-[10px] uppercase tracking-wider adm-text-muted font-medium">
-                <th className="py-3 px-4 w-14">Image</th>
-                <th className="py-3 px-4">Product Name & Category</th>
-                <th className="py-3 px-4">SKU & Slug</th>
-                <th className="py-3 px-4">Price</th>
-                <th className="py-3 px-4">Stock</th>
-                <th className="py-3 px-4">Status (Click to toggle)</th>
-                <th className="py-3 px-4">3D Studio</th>
-                <th className="py-3 px-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y adm-border text-xs adm-text-secondary">
-              {paginatedProducts.map((prod) => (
-                <tr key={prod.id} className="adm-table-hover transition-colors">
-                  <td className="py-2.5 px-4 w-14">
-                    <div
-                      onClick={() => openEditModal(prod)}
-                      className="relative w-11 h-11 rounded-xl overflow-hidden border adm-border bg-black/5 dark:bg-white/5 shrink-0 group cursor-pointer shadow-2xs hover:border-[#424a70] hover:scale-105 transition-all"
-                      title="Click to view/change image asset"
-                    >
-                      <Image
-                        src={prod.images?.[0] || '/products/unifort-plate-light.jpg'}
-                        alt={prod.name}
-                        fill
-                        sizes="44px"
-                        className="object-cover"
-                      />
-                    </div>
-                  </td>
-                  <td className="py-2.5 px-4 font-medium adm-text-primary">
-                    <div className="flex flex-col">
-                      <span className="font-semibold">{prod.name}</span>
-                      <span className="text-[10px] adm-text-muted">{prod.category?.name || 'Tableware'}</span>
-                    </div>
-                  </td>
-                  <td className="py-3.5 px-4">
-                    <div className="flex flex-col">
-                      <span className="font-mono adm-text-primary">{prod.sku}</span>
-                      <span className="text-[10px] adm-text-muted">{prod.slug}</span>
-                    </div>
-                  </td>
-                  <td className="py-3.5 px-4 font-mono font-medium adm-text-primary">
-                    ₹{prod.price}
-                  </td>
-                  <td className="py-3.5 px-4 font-mono">
-                    <span className={prod.stock < 5 ? 'text-amber-500 dark:text-amber-400 font-medium' : 'adm-text-secondary'}>
-                      {prod.stock} units
-                    </span>
-                  </td>
-                  <td className="py-3.5 px-4">
-                    <button
-                      type="button"
-                      onClick={() => handleToggleStatus(prod.id, prod.status)}
-                      title="Click to toggle status (DRAFT -> PUBLISHED -> ARCHIVED)"
-                      className={`inline-flex items-center text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full font-medium border cursor-pointer hover:scale-105 transition-all ${
-                        prod.status === 'PUBLISHED'
-                          ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
-                          : prod.status === 'DRAFT'
-                          ? 'bg-amber-500/15 border-amber-500/30 text-amber-700 dark:text-amber-300'
-                          : 'bg-black/5 dark:bg-white/5 adm-border adm-text-muted'
-                      }`}
-                    >
-                      {prod.status}
-                    </button>
-                  </td>
-                  <td className="py-3.5 px-4">
-                    {prod.isCustomizable ? (
-                      <span className="inline-flex items-center gap-1 text-[10px] text-purple-600 dark:text-purple-300 font-medium">
-                        <Sparkles className="w-3 h-3 text-purple-500 dark:text-purple-400" />
-                        <span className="capitalize">{prod.modelType}</span>
-                      </span>
-                    ) : (
-                      <span className="adm-text-muted text-[10px]">—</span>
-                    )}
-                  </td>
-                  <td className="py-3.5 px-4 text-right">
-                    <div className="flex items-center justify-end gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => openEditModal(prod)}
-                        className="p-1.5 rounded-lg text-[#424a70] dark:text-indigo-400 hover:bg-[#424a70]/10 dark:hover:bg-indigo-400/10 transition-colors cursor-pointer"
-                        title="Edit / Update Product Details"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-                      {canDeleteProducts ? (
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteProduct(prod.id)}
-                          className="p-1.5 rounded-lg text-red-500 dark:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
-                          title="Delete Product (Admin Only)"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      ) : (
-                        <span className="p-1.5 adm-text-muted opacity-40" title="Delete restricted to Admin role">
-                          <Lock className="w-3.5 h-3.5" />
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Reusable Pagination */}
-          <AdminPagination
-            page={page}
-            limit={limit}
-            total={totalProducts}
-            totalPages={totalPages}
-            onPageChange={setPage}
-            onLimitChange={(l) => {
-              setLimit(l)
-              setPage(1)
-            }}
-            itemName="pieces"
-          />
-        </div>
-      )}
-
-      {/* Create Product / Draft Modal */}
-      {isCreateModalOpen && (
-        <div className="fixed inset-0 adm-modal-overlay backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="w-full max-w-lg adm-modal-bg border rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-150">
-            <div className="p-5 border-b adm-border flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-600 dark:text-amber-400">
-                  <Plus className="w-4 h-4" />
-                </div>
-                <div>
-                  <span className="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400 font-semibold">
-                    Catalog Manager
-                  </span>
-                  <h3 className="text-base font-serif font-medium adm-text-primary">
-                    Create New Product or Draft
-                  </h3>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsCreateModalOpen(false)}
-                className="p-1.5 rounded-lg adm-text-muted hover:adm-text-primary cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateProduct} className="p-5 space-y-4 overflow-y-auto flex-1">
-              <div>
-                <label className="block text-[11px] uppercase tracking-wider adm-text-muted font-medium mb-1.5">
-                  Product Name *
-                </label>
-                <input
-                  type="text"
-                  value={formName}
-                  onChange={(e) => handleNameChange(e.target.value)}
-                  placeholder="e.g. No. 22 Basalt Espresso Cup"
-                  className="w-full px-3.5 py-2 adm-input border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] uppercase tracking-wider adm-text-muted font-medium mb-1.5">
-                    SKU Code *
-                  </label>
-                  <input
-                    type="text"
-                    value={formSku}
-                    onChange={(e) => setFormSku(e.target.value)}
-                    placeholder="UNI-ESP-022"
-                    className="w-full px-3.5 py-2 adm-input border rounded-xl text-xs focus:outline-none focus:border-[#424a70] font-mono"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] uppercase tracking-wider adm-text-muted font-medium mb-1.5">
-                    URL Slug
-                  </label>
-                  <input
-                    type="text"
-                    value={formSlug}
-                    onChange={(e) => setFormSlug(e.target.value)}
-                    placeholder="basalt-espresso-cup"
-                    className="w-full px-3.5 py-2 adm-input border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] uppercase tracking-wider adm-text-muted font-medium mb-1.5">
-                    Base Price (₹) *
-                  </label>
-                  <input
-                    type="number"
-                    value={formPrice}
-                    onChange={(e) => setFormPrice(e.target.value)}
-                    className="w-full px-3.5 py-2 adm-input border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
-                    required
-                    min="1"
-                    step="0.01"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] uppercase tracking-wider adm-text-muted font-medium mb-1.5">
-                    Initial Stock Count
-                  </label>
-                  <input
-                    type="number"
-                    value={formStock}
-                    onChange={(e) => setFormStock(e.target.value)}
-                    className="w-full px-3.5 py-2 adm-input border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
-                    min="0"
-                  />
-                </div>
-              </div>
-
-              {/* Glassmorphic Dropdowns */}
-              <div className="grid grid-cols-2 gap-3">
-                <GlassDropdown
-                  label="Initial Lifecycle State"
-                  options={statusOptions}
-                  value={formStatus}
-                  onChange={(val) => setFormStatus(val as ItemStatus)}
-                />
-
-                <GlassDropdown
-                  label="Category"
-                  options={categoryOptions}
-                  value={formCategory}
-                  onChange={(val) => setFormCategory(val)}
-                  placeholder="Select Category..."
-                />
-              </div>
-
-              {/* Media Asset & Image Upload */}
-              <div className="p-3.5 rounded-2xl bg-white/50 dark:bg-white/[0.03] border adm-border space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] uppercase tracking-wider adm-text-muted font-medium">
-                    Product Media Image *
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAssetPickerTarget('create')
-                      setIsAssetPickerOpen(true)
-                    }}
-                    className="text-xs text-[#424a70] dark:text-[#a5b4fc] font-medium flex items-center gap-1 hover:underline cursor-pointer"
-                  >
-                    <FolderOpen className="w-3.5 h-3.5" />
-                    <span>Choose from Assets</span>
-                  </button>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <div className="relative w-16 h-16 rounded-xl overflow-hidden border adm-border bg-black/5 dark:bg-white/5 shrink-0">
-                    <Image
-                      src={formImage || '/products/unifort-plate-light.jpg'}
-                      alt="Product preview"
-                      fill
-                      className="object-cover"
-                    />
-                  </div>
-
-                  <div className="flex-1 space-y-1.5">
-                    <input
-                      type="file"
-                      ref={createFileInputRef}
-                      className="hidden"
-                      accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                      onChange={(e) => {
-                        if (e.target.files?.[0]) {
-                          handleUploadProductImage(e.target.files[0], 'create')
-                        }
-                      }}
-                    />
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => createFileInputRef.current?.click()}
-                        disabled={isUploadingImage}
-                        className="px-3 py-1.5 rounded-xl border adm-border bg-white/80 dark:bg-white/10 hover:bg-white text-xs adm-text-primary flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
-                      >
-                        <UploadCloud className="w-3.5 h-3.5 text-[#424a70] dark:text-[#a5b4fc]" />
-                        <span>{isUploadingImage ? 'Uploading...' : 'Upload Image'}</span>
-                      </button>
-                    </div>
-                    <input
-                      type="text"
-                      value={formImage}
-                      onChange={(e) => setFormImage(e.target.value)}
-                      placeholder="/assets/image.jpg"
-                      className="w-full px-3 py-1.5 adm-input border rounded-lg text-xs font-mono focus:outline-none focus:border-[#424a70]"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {errorMessage && (
-                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-red-500 flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 shrink-0 text-red-500" />
-                  <span>{errorMessage}</span>
-                </div>
-              )}
-
-              {/* 3D Studio Customization Configuration */}
-              <div className="p-4 adm-card-subtle border adm-border rounded-xl space-y-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-xs font-medium adm-text-primary block">
-                      Enable 3D Atelier Customization
-                    </span>
-                    <span className="text-[10px] adm-text-muted">
-                      Allows patrons to place custom glazes, decals, and patterns in the 3D studio.
-                    </span>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={formIsCustomizable}
-                    onChange={(e) => setFormIsCustomizable(e.target.checked)}
-                    className="w-4 h-4 rounded text-[#424a70] focus:ring-0 bg-transparent border-black/20 dark:border-white/20 cursor-pointer"
-                  />
-                </div>
-
-                {formIsCustomizable && (
-                  <GlassDropdown
-                    label="3D Silhouette Model Type"
-                    options={modelTypeOptions}
-                    value={formModelType}
-                    onChange={(val) => setFormModelType(val as ModelType)}
-                  />
-                )}
-              </div>
-
-              <div className="pt-2 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsCreateModalOpen(false)}
-                  className="px-3.5 py-2 rounded-xl text-xs adm-text-muted hover:adm-text-primary cursor-pointer"
-                  disabled={isSubmitting}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-4 py-2.5 adm-btn-primary rounded-xl text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>Saving to Catalog...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Save to Catalog</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Product Modal */}
-      {editingProduct && (
-        <div className="fixed inset-0 adm-modal-overlay backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="w-full max-w-lg adm-modal-bg border rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-150">
-            <div className="p-5 border-b adm-border flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-[#424a70] dark:text-indigo-400">
-                  <Pencil className="w-4 h-4" />
-                </div>
-                <div>
-                  <span className="text-[10px] uppercase tracking-wider text-[#424a70] dark:text-indigo-400 font-semibold">
-                    Catalog Editor
-                  </span>
-                  <h3 className="text-base font-serif font-medium adm-text-primary">
-                    Update Product & Specs
-                  </h3>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setEditingProduct(null)}
-                className="p-1.5 rounded-lg adm-text-muted hover:adm-text-primary cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleUpdateProduct} className="p-5 space-y-4 overflow-y-auto flex-1">
-              <div>
-                <label className="block text-[11px] uppercase tracking-wider adm-text-muted font-medium mb-1.5">
-                  Product Name *
-                </label>
-                <input
-                  type="text"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  placeholder="e.g. No. 22 Basalt Espresso Cup"
-                  className="w-full px-3.5 py-2 adm-input border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] uppercase tracking-wider adm-text-muted font-medium mb-1.5">
-                    SKU Code *
-                  </label>
-                  <input
-                    type="text"
-                    value={editSku}
-                    onChange={(e) => setEditSku(e.target.value)}
-                    placeholder="UNI-ESP-022"
-                    className="w-full px-3.5 py-2 adm-input border rounded-xl text-xs focus:outline-none focus:border-[#424a70] font-mono"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] uppercase tracking-wider adm-text-muted font-medium mb-1.5">
-                    URL Slug
-                  </label>
-                  <input
-                    type="text"
-                    value={editSlug}
-                    onChange={(e) => setEditSlug(e.target.value)}
-                    placeholder="basalt-espresso-cup"
-                    className="w-full px-3.5 py-2 adm-input border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] uppercase tracking-wider adm-text-muted font-medium mb-1.5">
-                    Base Price (₹) *
-                  </label>
-                  <input
-                    type="number"
-                    value={editPrice}
-                    onChange={(e) => setEditPrice(e.target.value)}
-                    className="w-full px-3.5 py-2 adm-input border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
-                    required
-                    min="1"
-                    step="0.01"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] uppercase tracking-wider adm-text-muted font-medium mb-1.5">
-                    Stock Count
-                  </label>
-                  <input
-                    type="number"
-                    value={editStock}
-                    onChange={(e) => setEditStock(e.target.value)}
-                    className="w-full px-3.5 py-2 adm-input border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
-                    min="0"
-                  />
-                </div>
-              </div>
-
-              {/* Glassmorphic Dropdowns */}
-              <div className="grid grid-cols-2 gap-3">
-                <GlassDropdown
-                  label="Lifecycle State"
-                  options={statusOptions}
-                  value={editStatus}
-                  onChange={(val) => setEditStatus(val as ItemStatus)}
-                />
-
-                <GlassDropdown
-                  label="Category"
-                  options={categoryOptions}
-                  value={editCategory}
-                  onChange={(val) => setEditCategory(val)}
-                  placeholder="Select Category..."
-                />
-              </div>
-
-              {/* Media Asset & Image Upload */}
-              <div className="p-3.5 rounded-2xl bg-white/50 dark:bg-white/[0.03] border adm-border space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] uppercase tracking-wider adm-text-muted font-medium">
-                    Product Media Image *
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAssetPickerTarget('edit')
-                      setIsAssetPickerOpen(true)
-                    }}
-                    className="text-xs text-[#424a70] dark:text-[#a5b4fc] font-medium flex items-center gap-1 hover:underline cursor-pointer"
-                  >
-                    <FolderOpen className="w-3.5 h-3.5" />
-                    <span>Choose from Assets</span>
-                  </button>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <div className="relative w-16 h-16 rounded-xl overflow-hidden border adm-border bg-black/5 dark:bg-white/5 shrink-0">
-                    <Image
-                      src={editImage || '/products/unifort-plate-light.jpg'}
-                      alt="Product preview"
-                      fill
-                      className="object-cover"
-                    />
-                  </div>
-
-                  <div className="flex-1 space-y-1.5">
-                    <input
-                      type="file"
-                      ref={editFileInputRef}
-                      className="hidden"
-                      accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                      onChange={(e) => {
-                        if (e.target.files?.[0]) {
-                          handleUploadProductImage(e.target.files[0], 'edit')
-                        }
-                      }}
-                    />
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => editFileInputRef.current?.click()}
-                        disabled={isUploadingImage}
-                        className="px-3 py-1.5 rounded-xl border adm-border bg-white/80 dark:bg-white/10 hover:bg-white text-xs adm-text-primary flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
-                      >
-                        <UploadCloud className="w-3.5 h-3.5 text-[#424a70] dark:text-[#a5b4fc]" />
-                        <span>{isUploadingImage ? 'Uploading...' : 'Upload Image'}</span>
-                      </button>
-                    </div>
-                    <input
-                      type="text"
-                      value={editImage}
-                      onChange={(e) => setEditImage(e.target.value)}
-                      placeholder="/assets/image.jpg"
-                      className="w-full px-3 py-1.5 adm-input border rounded-lg text-xs font-mono focus:outline-none focus:border-[#424a70]"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[11px] uppercase tracking-wider adm-text-muted font-medium mb-1.5">
-                  Artisanal Piece Description
-                </label>
-                <textarea
-                  rows={2}
-                  value={editDescription}
-                  onChange={(e) => setEditDescription(e.target.value)}
-                  placeholder="Description of the clay body, mineral glaze, and tactile profile..."
-                  className="w-full px-3.5 py-2 adm-input border rounded-xl text-xs focus:outline-none focus:border-[#424a70] resize-none"
-                />
-              </div>
-
-              {editErrorMessage && (
-                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-red-500 flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 shrink-0 text-red-500" />
-                  <span>{editErrorMessage}</span>
-                </div>
-              )}
-
-              {/* 3D Studio Customization Configuration */}
-              <div className="p-4 adm-card-subtle border adm-border rounded-xl space-y-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-xs font-medium adm-text-primary block">
-                      Enable 3D Atelier Customization
-                    </span>
-                    <span className="text-[10px] adm-text-muted">
-                      Allows patrons to place custom glazes, decals, and patterns in the 3D studio.
-                    </span>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={editIsCustomizable}
-                    onChange={(e) => setEditIsCustomizable(e.target.checked)}
-                    className="w-4 h-4 rounded text-[#424a70] focus:ring-0 bg-transparent border-black/20 dark:border-white/20 cursor-pointer"
-                  />
-                </div>
-
-                {editIsCustomizable && (
-                  <GlassDropdown
-                    label="3D Silhouette Model Type"
-                    options={modelTypeOptions}
-                    value={editModelType}
-                    onChange={(val) => setEditModelType(val as ModelType)}
-                  />
-                )}
-              </div>
-
-              <div className="pt-2 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setEditingProduct(null)}
-                  className="px-3.5 py-2 rounded-xl text-xs adm-text-muted hover:adm-text-primary cursor-pointer"
-                  disabled={isSubmitting}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-4 py-2.5 adm-btn-primary rounded-xl text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>Saving Changes...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Save className="w-3.5 h-3.5" />
-                      <span>Update Product</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-      {/* Asset Picker Modal Dialog */}
-      {isAssetPickerOpen && (
-        <div className="fixed inset-0 adm-modal-overlay backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="w-full max-w-4xl adm-modal-bg border rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95 duration-150">
-            <div className="p-5 border-b adm-border flex items-center justify-between">
-              <div>
-                <span className="text-[10px] uppercase tracking-wider text-[#424a70] dark:text-indigo-400 font-semibold">
-                  Atelier Media Assets
-                </span>
-                <h3 className="text-base font-serif font-medium adm-text-primary">
-                  Select Product Image from Public Assets
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsAssetPickerOpen(false)}
-                className="p-1.5 rounded-lg adm-text-muted hover:adm-text-primary cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="p-6 overflow-y-auto flex-1">
-              <MediaLibraryView
-                isPickerMode
-                onSelectAsset={(url) => {
-                  if (assetPickerTarget === 'create') {
-                    setFormImage(url)
-                  } else {
-                    setEditImage(url)
-                  }
-                  setIsAssetPickerOpen(false)
-                }}
-              />
-            </div>
-          </div>
-        </div>
-      )}
+      </AdminModal>
     </div>
   )
 }

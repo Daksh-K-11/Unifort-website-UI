@@ -61,7 +61,12 @@ export interface PrintableSurface {
 }
 
 export interface CustomizableProduct {
+  /** Studio slug (matches the database product slug). */
   id: string
+  /** Database product id used for bag / orders. */
+  dbProductId?: string
+  stock?: number
+  modelUrl?: string | null
   name: string
   type: string
   category: 'Drinkware' | 'Dinnerware' | 'Table & Decor' | 'Lifestyle'

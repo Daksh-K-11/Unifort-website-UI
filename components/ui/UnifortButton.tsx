@@ -210,6 +210,9 @@ export function UnifortButton({
         style={mergedStyle}
         aria-label={ariaLabel || title}
         title={title}
+        aria-disabled={disabled || loading || undefined}
+        tabIndex={disabled || loading ? -1 : undefined}
+        onClick={disabled || loading ? (e) => e.preventDefault() : undefined}
       >
         {renderedContent}
       </Link>

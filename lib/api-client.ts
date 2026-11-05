@@ -1,183 +1,170 @@
 /**
- * UNIFORT Atelier Unified API Client
- * Connects frontend services to the backend with automatic JWT attachment,
- * comprehensive error parsing, credentials support, and type safety.
+ * UNIFORT API client.
+ *
+ * - Authentication uses httpOnly session cookies set by the API; no tokens are
+ *   ever stored in JavaScript-accessible storage.
+ * - In the browser requests go to the same origin (`/api/v1`), which Next.js
+ *   rewrites to the backend (see next.config.mjs). Cookies are therefore
+ *   first-party and CORS is not involved.
+ * - On a 401 the client transparently refreshes the session once and retries.
+ * - Never throws: callers always receive `{ success, data?, message, errors?, status }`.
  */
+
+export interface ApiFieldError {
+  field?: string
+  message: string
+}
 
 export interface ApiResponse<T = any> {
   success: boolean
   message?: string
   data?: T
-  pagination?: {
-    page: number
-    limit: number
-    total: number
-    totalPages: number
-    hasNextPage?: boolean
-    hasPrevPage?: boolean
-    [key: string]: any
-  }
   meta?: any
-  errors?: Array<{ field?: string; message: string }>
+  /** @deprecated use `meta` */
+  pagination?: any
+  errors?: ApiFieldError[]
   status: number
 }
 
-const getApiBaseUrl = (): string => {
-  if (typeof window !== 'undefined' && process.env.NEXT_PUBLIC_API_URL) {
-    const envUrl = process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '')
-    return envUrl.endsWith('/api/v1') ? envUrl : `${envUrl}/api/v1`
+/** Server-side (RSC / route handlers) talk to the API directly; browsers use the same-origin proxy. */
+export function getApiBaseUrl(): string {
+  if (typeof window === 'undefined') {
+    const internal = process.env.API_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
+    return `${internal.replace(/\/$/, '').replace(/\/api\/v1$/, '')}/api/v1`
   }
-  return 'http://localhost:5000/api/v1'
+  return '/api/v1'
 }
 
-export const API_BASE_URL = getApiBaseUrl()
+export const SESSION_HINT_COOKIE = 'uf_session'
+export const SESSION_EXPIRED_EVENT = 'unifort:session-expired'
 
-// Token storage keys
-export const TOKEN_KEY = 'unifort_token'
-export const ADMIN_TOKEN_KEY = 'unifort_admin_token'
+/** Whether the browser probably has a session (non-sensitive hint cookie set by the API). */
+export function hasSessionHint(): boolean {
+  if (typeof document === 'undefined') return false
+  return document.cookie.split('; ').some((c) => c.startsWith(`${SESSION_HINT_COOKIE}=`))
+}
 
-export const getToken = (preferAdmin = false): string | null => {
-  if (typeof window === 'undefined') return null
-  if (preferAdmin) {
-    return sessionStorage.getItem(ADMIN_TOKEN_KEY) || localStorage.getItem(ADMIN_TOKEN_KEY) || null
+let refreshing: Promise<boolean> | null = null
+
+async function refreshSession(): Promise<boolean> {
+  if (!refreshing) {
+    refreshing = fetch(`${getApiBaseUrl()}/auth/refresh`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'X-Requested-With': 'XMLHttpRequest', Accept: 'application/json' },
+    })
+      .then((r) => r.ok)
+      .catch(() => false)
+      .finally(() => {
+        setTimeout(() => (refreshing = null), 0)
+      })
   }
-  return localStorage.getItem(TOKEN_KEY) || null
+  return refreshing
 }
 
-export const setCustomerToken = (token: string): void => {
-  if (typeof window === 'undefined') return
-  localStorage.setItem(TOKEN_KEY, token)
-}
+const NO_REFRESH = ['/auth/login', '/auth/register', '/auth/refresh', '/auth/logout', '/auth/forgot-password', '/auth/reset-password']
 
-export const clearCustomerToken = (): void => {
-  if (typeof window === 'undefined') return
-  localStorage.removeItem(TOKEN_KEY)
-}
+export async function apiClient<T = any>(endpoint: string, options: RequestInit = {}, _retry = true): Promise<ApiResponse<T>> {
+  const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
+  const url = endpoint.startsWith('http') ? endpoint : `${getApiBaseUrl()}${path}`
 
-export const setAdminToken = (token: string): void => {
-  if (typeof window === 'undefined') return
-  sessionStorage.setItem(ADMIN_TOKEN_KEY, token)
-  localStorage.setItem(ADMIN_TOKEN_KEY, token)
-}
-
-export const clearAdminToken = (): void => {
-  if (typeof window === 'undefined') return
-  sessionStorage.removeItem(ADMIN_TOKEN_KEY)
-  localStorage.removeItem(ADMIN_TOKEN_KEY)
-}
-
-/**
- * Robust Core Fetch Wrapper
- */
-export async function apiClient<T = any>(
-  endpoint: string,
-  options: RequestInit = {},
-  preferAdmin = false
-): Promise<ApiResponse<T>> {
-  const url = endpoint.startsWith('http')
-    ? endpoint
-    : `${API_BASE_URL}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`
-
-  const token = getToken(preferAdmin)
   const headers: Record<string, string> = {
     Accept: 'application/json',
-    ...(options.headers as Record<string, string> || {}),
+    'X-Requested-With': 'XMLHttpRequest',
+    ...((options.headers as Record<string, string>) || {}),
   }
-
-  // Set Content-Type to JSON if body is an object and not FormData
   if (options.body && !(options.body instanceof FormData) && !headers['Content-Type']) {
     headers['Content-Type'] = 'application/json'
   }
 
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
+  let res: Response
+  try {
+    res = await fetch(url, { ...options, headers, credentials: 'include', cache: 'no-store' })
+  } catch {
+    return { success: false, status: 0, message: 'We could not reach the server. Please check your connection and try again.' }
   }
 
+  if (res.status === 401 && _retry && typeof window !== 'undefined' && !NO_REFRESH.some((p) => path.startsWith(p)) && hasSessionHint()) {
+    const ok = await refreshSession()
+    if (ok) return apiClient<T>(endpoint, options, false)
+    window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT))
+  }
+
+  let json: any = null
   try {
-    const res = await fetch(url, {
-      ...options,
-      cache: 'no-store',
-      headers,
-      credentials: 'omit',
-    })
+    json = await res.json()
+  } catch {
+    // non-JSON (e.g. proxy error page)
+  }
 
-    let json: any = null
-    try {
-      json = await res.json()
-    } catch {
-      // Non-JSON response
-    }
-
-    if (!res.ok) {
-      const errorMessage =
-        json?.message ||
-        (json?.errors && Array.isArray(json.errors) ? json.errors.map((e: any) => e.message).join(', ') : null) ||
-        `Request failed with status ${res.status}: ${res.statusText}`
-
-      return {
-        success: false,
-        message: errorMessage,
-        errors: json?.errors,
-        status: res.status,
-      }
-    }
-
-    return {
-      success: true,
-      message: json?.message,
-      data: json?.data !== undefined ? json.data : json,
-      pagination: json?.pagination || json?.meta,
-      meta: json?.meta,
-      status: res.status,
-    }
-  } catch (error: any) {
-    console.error(`[API Network Error] ${endpoint}:`, error)
+  if (!res.ok) {
     return {
       success: false,
-      message: error?.message || 'Unable to connect to the atelier server. Please verify your connection.',
-      status: 0,
+      status: res.status,
+      message:
+        json?.message ||
+        (res.status === 429
+          ? 'Too many requests. Please wait a moment and try again.'
+          : res.status >= 500
+            ? 'Something went wrong on our side. Please try again.'
+            : `Request failed (${res.status})`),
+      errors: Array.isArray(json?.errors) ? json.errors : undefined,
     }
+  }
+
+  return {
+    success: true,
+    status: res.status,
+    message: json?.message,
+    data: json && 'data' in json ? json.data : json,
+    meta: json?.meta,
+    pagination: json?.meta,
   }
 }
 
-// Convenience REST methods
+const withBody = (method: string) => <T = any>(endpoint: string, body?: unknown, options?: RequestInit) =>
+  apiClient<T>(endpoint, {
+    ...options,
+    method,
+    body: body === undefined ? undefined : body instanceof FormData ? body : JSON.stringify(body),
+  })
+
 export const api = {
-  get: <T = any>(endpoint: string, options?: RequestInit, preferAdmin = false) =>
-    apiClient<T>(endpoint, { ...options, method: 'GET' }, preferAdmin),
-
-  post: <T = any>(endpoint: string, body?: any, options?: RequestInit, preferAdmin = false) =>
-    apiClient<T>(
-      endpoint,
-      {
-        ...options,
-        method: 'POST',
-        body: body ? JSON.stringify(body) : undefined,
-      },
-      preferAdmin
-    ),
-
-  put: <T = any>(endpoint: string, body?: any, options?: RequestInit, preferAdmin = false) =>
-    apiClient<T>(
-      endpoint,
-      {
-        ...options,
-        method: 'PUT',
-        body: body ? JSON.stringify(body) : undefined,
-      },
-      preferAdmin
-    ),
-
-  patch: <T = any>(endpoint: string, body?: any, options?: RequestInit, preferAdmin = false) =>
-    apiClient<T>(
-      endpoint,
-      {
-        ...options,
-        method: 'PATCH',
-        body: body ? JSON.stringify(body) : undefined,
-      },
-      preferAdmin
-    ),
-
-  delete: <T = any>(endpoint: string, options?: RequestInit, preferAdmin = false) =>
-    apiClient<T>(endpoint, { ...options, method: 'DELETE' }, preferAdmin),
+  get: <T = any>(endpoint: string, options?: RequestInit) => apiClient<T>(endpoint, { ...options, method: 'GET' }),
+  post: withBody('POST'),
+  put: withBody('PUT'),
+  patch: withBody('PATCH'),
+  delete: <T = any>(endpoint: string, options?: RequestInit) => apiClient<T>(endpoint, { ...options, method: 'DELETE' }),
+  /** multipart upload: field name "file" */
+  upload: <T = any>(endpoint: string, file: Blob, fields: Record<string, string> = {}, filename = 'upload') => {
+    const fd = new FormData()
+    fd.append('file', file, (file as File).name || filename)
+    for (const [k, v] of Object.entries(fields)) fd.append(k, v)
+    return apiClient<T>(endpoint, { method: 'POST', body: fd })
+  },
 }
+
+/** First human-readable error from a response (field errors first). */
+export function errorMessage(res: ApiResponse, fallback = 'Something went wrong. Please try again.') {
+  return res.errors?.[0]?.message || res.message || fallback
+}
+
+/** Map API field errors to { field: message } for inline form errors. */
+export function fieldErrors(res: ApiResponse): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const e of res.errors || []) if (e.field && !out[e.field]) out[e.field] = e.message
+  return out
+}
+
+/**
+ * Resolve media paths. Uploaded files ("/uploads/…") and catalogue images ("/products/…")
+ * are served from the storefront origin; absolute https URLs are passed through.
+ */
+export function mediaUrl(src?: string | null, fallback = '/products/unifort-plate-light.jpg'): string {
+  if (!src) return fallback
+  if (src.startsWith('data:') || src.startsWith('http') || src.startsWith('/')) return src
+  return `/${src}`
+}
+
+export const formatINR = (n: number | null | undefined) =>
+  `₹${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: Number(n || 0) % 1 ? 2 : 0, maximumFractionDigits: 2 })}`

@@ -1,318 +1,268 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
-import { FolderTree, Plus, Search, Trash2, X, Lock } from 'lucide-react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import { FolderTree, Plus, Search, Trash2, Pencil } from 'lucide-react'
 import { useAdminAuth } from '../admin-auth-context'
-import { CategoryItem } from '../admin-types'
-import { api } from '../../../lib/api-client'
+import { api, mediaUrl } from '@/lib/api-client'
+import { AdminModal, Field, inputCls, notify, Spinner, confirmAction } from '../admin-ui'
+
+interface Category {
+  id: string
+  name: string
+  slug: string
+  description: string | null
+  imageUrl: string | null
+  status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED'
+  sortOrder: number
+  _count?: { products: number }
+}
+
+const slugify = (v: string) => v.toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+const blank = { name: '', slug: '', description: '', imageUrl: '', status: 'PUBLISHED' as Category['status'], sortOrder: '0' }
 
 export function CategoriesView() {
   const { isAdmin } = useAdminAuth()
-
-  const [categories, setCategories] = useState<CategoryItem[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
-  const [filterTab, setFilterTab] = useState<'ALL' | 'ACTIVE' | 'EMPTY'>('ALL')
-  const [searchQuery, setSearchQuery] = useState('')
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
-  const [name, setName] = useState('')
-  const [slug, setSlug] = useState('')
-  const [description, setDescription] = useState('')
+  const [search, setSearch] = useState('')
+  const [tab, setTab] = useState<'ALL' | 'PUBLISHED' | 'HIDDEN' | 'EMPTY'>('ALL')
+  const [open, setOpen] = useState(false)
+  const [editing, setEditing] = useState<Category | null>(null)
+  const [form, setForm] = useState(blank)
+  const [slugTouched, setSlugTouched] = useState(false)
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [saving, setSaving] = useState(false)
 
-  const fetchCategories = useCallback(async () => {
+  const load = useCallback(async () => {
     setLoading(true)
-    try {
-      const res = await api.get('/categories')
-      if (res.success && Array.isArray(res.data)) {
-        setCategories(res.data)
-      }
-    } catch (e) {
-      console.error('Failed to load categories', e)
-    } finally {
-      setLoading(false)
-    }
+    const res = await api.get<Category[]>('/categories?all=true')
+    if (res.success && Array.isArray(res.data)) setCategories(res.data)
+    else notify(res)
+    setLoading(false)
   }, [])
 
   useEffect(() => {
-    fetchCategories()
-  }, [fetchCategories])
+    load()
+  }, [load])
 
-  const handleNameChange = (val: string) => {
-    setName(val)
-    if (!slug || slug === name.toLowerCase().replace(/\s+/g, '-')) {
-      setSlug(val.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''))
-    }
+  const shown = useMemo(
+    () =>
+      categories.filter((c) => {
+        const q = search.toLowerCase()
+        const matches = !q || c.name.toLowerCase().includes(q) || c.slug.includes(q)
+        const count = c._count?.products || 0
+        return (
+          matches &&
+          (tab === 'ALL' || (tab === 'PUBLISHED' && c.status === 'PUBLISHED') || (tab === 'HIDDEN' && c.status !== 'PUBLISHED') || (tab === 'EMPTY' && count === 0))
+        )
+      }),
+    [categories, search, tab]
+  )
+
+  const openCreate = () => {
+    setEditing(null)
+    setForm(blank)
+    setSlugTouched(false)
+    setErrors({})
+    setOpen(true)
   }
 
-  const handleCreateCategory = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!name) return
+  const openEdit = (c: Category) => {
+    setEditing(c)
+    setForm({ name: c.name, slug: c.slug, description: c.description || '', imageUrl: c.imageUrl || '', status: c.status, sortOrder: String(c.sortOrder ?? 0) })
+    setSlugTouched(true)
+    setErrors({})
+    setOpen(true)
+  }
 
+  const save = async () => {
+    setSaving(true)
     const payload = {
-      name,
-      slug: slug || name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
-      description,
+      name: form.name.trim(),
+      slug: form.slug.trim() || slugify(form.name),
+      description: form.description.trim() || null,
+      imageUrl: form.imageUrl.trim() || null,
+      status: form.status,
+      sortOrder: Number(form.sortOrder) || 0,
     }
-
-    const res = await api.post('/categories', payload, {}, true)
-    if (res.success && res.data) {
-      setCategories((prev) => [res.data, ...prev])
-      setIsCreateModalOpen(false)
-      setName('')
-      setSlug('')
-      setDescription('')
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new Event('unifort_products_updated'))
-      }
+    const res = editing ? await api.put(`/categories/${editing.id}`, payload) : await api.post('/categories', payload)
+    setSaving(false)
+    if (notify(res, editing ? 'Category updated' : 'Category created', setErrors)) {
+      setOpen(false)
+      load()
     }
   }
 
-  const handleDeleteCategory = async (id: string) => {
-    if (!isAdmin) return
-    const confirmed = window.confirm('Are you sure you wish to delete this category?')
-    if (!confirmed) return
-    setCategories((prev) => prev.filter((c) => c.id !== id))
-    await api.delete(`/categories/${id}`, {}, true)
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new Event('unifort_products_updated'))
-    }
+  const remove = async (c: Category) => {
+    if (!confirmAction(`Delete category "${c.name}"? This cannot be undone.`)) return
+    const res = await api.delete(`/categories/${c.id}`)
+    if (notify(res, 'Category deleted')) load()
   }
 
-  const activeCount = categories.filter((c) => (c._count?.products || 0) > 0).length
-  const emptyCount = categories.filter((c) => (c._count?.products || 0) === 0).length
-
-  const filteredCategories = categories.filter((c) => {
-    const matchesSearch =
-      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.slug.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (c.description && c.description.toLowerCase().includes(searchQuery.toLowerCase()))
-    const count = c._count?.products || 0
-    const matchesTab =
-      filterTab === 'ALL' ||
-      (filterTab === 'ACTIVE' && count > 0) ||
-      (filterTab === 'EMPTY' && count === 0)
-    return matchesSearch && matchesTab
-  })
+  const tabs: [typeof tab, string][] = [
+    ['ALL', `All (${categories.length})`],
+    ['PUBLISHED', 'Published'],
+    ['HIDDEN', 'Draft / archived'],
+    ['EMPTY', 'Empty'],
+  ]
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-serif tracking-tight adm-text-primary font-medium">
-            Taxonomy & Collections
-          </h2>
-          <p className="text-xs adm-text-muted mt-0.5">
-            Tableware categories, editorial groupings, and living collections.
-          </p>
+          <h2 className="text-xl font-serif tracking-tight adm-text-primary font-medium">Categories</h2>
+          <p className="text-xs adm-text-muted mt-0.5">Only published categories appear on the storefront.</p>
         </div>
-
-        <button
-          type="button"
-          onClick={() => setIsCreateModalOpen(true)}
-          className="px-4 py-2.5 adm-btn-primary rounded-xl text-xs flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>New Collection Category</span>
+        <button type="button" onClick={openCreate} className="px-4 py-2.5 adm-btn-primary rounded-xl text-xs flex items-center gap-1.5 self-start">
+          <Plus className="w-3.5 h-3.5" /> New category
         </button>
       </div>
 
-      {/* Filter and Search Bar */}
-      <div className="adm-card border adm-border rounded-2xl p-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setFilterTab('ALL')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-              filterTab === 'ALL'
-                ? 'tab-active bg-[#424a70] !text-white [&_*]:!text-white shadow-sm'
-                : 'adm-text-muted hover:adm-text-primary hover:bg-black/5 dark:hover:bg-white/5'
-            }`}
-          >
-            All Categories ({categories.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilterTab('ACTIVE')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-              filterTab === 'ACTIVE'
-                ? 'tab-active bg-[#424a70] !text-white [&_*]:!text-white shadow-sm'
-                : 'adm-text-muted hover:adm-text-primary hover:bg-black/5 dark:hover:bg-white/5'
-            }`}
-          >
-            With Pieces ({activeCount})
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilterTab('EMPTY')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-              filterTab === 'EMPTY'
-                ? 'tab-active bg-[#424a70] !text-white [&_*]:!text-white shadow-sm'
-                : 'adm-text-muted hover:adm-text-primary hover:bg-black/5 dark:hover:bg-white/5'
-            }`}
-          >
-            Unassigned / Empty ({emptyCount})
-          </button>
+      <div className="adm-card border adm-border rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Filter categories">
+          {tabs.map(([k, label]) => (
+            <button
+              key={k}
+              type="button"
+              aria-pressed={tab === k}
+              onClick={() => setTab(k)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium ${tab === k ? 'bg-[#424a70] !text-white' : 'adm-text-muted hover:bg-black/5'}`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
-
-        <div className="relative w-full md:w-72">
-          <Search className="w-3.5 h-3.5 adm-text-muted absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search category or collection slug..."
-            className="w-full pl-9 pr-3 py-1.5 adm-input border rounded-xl text-xs focus:outline-none focus:border-[#424a70] transition-colors"
-          />
+        <div className="relative md:w-64">
+          <Search className="w-3.5 h-3.5 adm-text-muted absolute left-3 top-1/2 -translate-y-1/2" aria-hidden />
+          <label htmlFor="cat-search" className="sr-only">
+            Search categories
+          </label>
+          <input id="cat-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search…" className={`${inputCls} pl-8`} />
         </div>
       </div>
 
-      {/* Table or Empty State */}
-      {filteredCategories.length === 0 ? (
-        <div className="p-12 rounded-2xl adm-card border adm-border flex flex-col items-center justify-center text-center">
-          <div className="w-12 h-12 rounded-2xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center mb-3">
-            <FolderTree className="w-6 h-6 text-teal-500 dark:text-teal-400" />
+      <div className="adm-card border adm-border rounded-2xl overflow-x-auto">
+        {loading ? (
+          <Spinner />
+        ) : shown.length === 0 ? (
+          <div className="p-10 text-center text-sm adm-text-muted">
+            <FolderTree className="w-6 h-6 mx-auto mb-2" /> No categories found.
           </div>
-          <h3 className="text-base font-medium adm-text-primary">No Categories Created</h3>
-          <p className="text-xs adm-text-muted mt-1 max-w-sm">
-            Categories organize the tableware catalog into Table, Glass, Objects, and lifestyle collections.
-          </p>
-          <div className="mt-5">
-            <button
-              type="button"
-              onClick={() => setIsCreateModalOpen(true)}
-              className="px-4 py-2.5 adm-btn-primary rounded-xl text-xs flex items-center gap-1.5 cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Add First Category</span>
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="adm-card border adm-border rounded-2xl overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b adm-border adm-table-head text-[10px] uppercase tracking-wider adm-text-muted font-medium">
-                <th className="py-3 px-4">Category Name</th>
-                <th className="py-3 px-4">Slug</th>
-                <th className="py-3 px-4">Description</th>
-                <th className="py-3 px-4">Assigned Pieces</th>
-                <th className="py-3 px-4 text-right">Actions</th>
+        ) : (
+          <table className="w-full text-xs">
+            <thead className="adm-text-muted text-left">
+              <tr className="border-b adm-border">
+                <th className="p-3">Category</th>
+                <th className="p-3">Slug</th>
+                <th className="p-3">Products</th>
+                <th className="p-3">Order</th>
+                <th className="p-3">Status</th>
+                <th className="p-3 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y adm-border text-xs adm-text-secondary">
-              {filteredCategories.map((cat) => (
-                <tr key={cat.id} className="adm-table-hover transition-colors">
-                  <td className="py-3.5 px-4 font-medium adm-text-primary">{cat.name}</td>
-                  <td className="py-3.5 px-4 font-mono adm-text-muted">{cat.slug}</td>
-                  <td className="py-3.5 px-4 adm-text-muted max-w-xs truncate">
-                    {cat.description || '—'}
+            <tbody>
+              {shown.map((c) => (
+                <tr key={c.id} className="border-b adm-border last:border-0">
+                  <td className="p-3">
+                    <div className="flex items-center gap-3">
+                      {c.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={mediaUrl(c.imageUrl)} alt="" className="w-9 h-9 rounded-lg object-cover" />
+                      ) : (
+                        <div className="w-9 h-9 rounded-lg bg-black/5" />
+                      )}
+                      <div>
+                        <div className="font-medium adm-text-primary">{c.name}</div>
+                        {c.description && <div className="adm-text-muted line-clamp-1 max-w-xs">{c.description}</div>}
+                      </div>
+                    </div>
                   </td>
-                  <td className="py-3.5 px-4 font-mono adm-text-secondary">
-                    {cat._count?.products || 0} products
+                  <td className="p-3 font-mono adm-text-muted">{c.slug}</td>
+                  <td className="p-3">{c._count?.products ?? 0}</td>
+                  <td className="p-3">{c.sortOrder}</td>
+                  <td className="p-3">
+                    <span className={`px-2 py-1 rounded-full text-[11px] ${c.status === 'PUBLISHED' ? 'bg-emerald-500/15 text-emerald-600' : 'bg-slate-500/15 adm-text-muted'}`}>
+                      {c.status.toLowerCase()}
+                    </span>
                   </td>
-                  <td className="py-3.5 px-4 text-right">
-                    {isAdmin ? (
+                  <td className="p-3 text-right whitespace-nowrap">
+                    <button type="button" onClick={() => openEdit(c)} className="p-1.5 adm-text-muted hover:adm-text-primary" aria-label={`Edit ${c.name}`}>
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    {isAdmin && (
                       <button
                         type="button"
-                        onClick={() => handleDeleteCategory(cat.id)}
-                        className="p-1.5 rounded-lg text-red-500 dark:text-red-400 hover:bg-red-500/10 transition-colors"
-                        title="Delete Category (Admin only)"
+                        onClick={() => remove(c)}
+                        disabled={(c._count?.products || 0) > 0}
+                        title={(c._count?.products || 0) > 0 ? 'Move or archive its products first' : 'Delete'}
+                        className="p-1.5 text-red-500 disabled:opacity-30"
+                        aria-label={`Delete ${c.name}`}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
-                    ) : (
-                      <Lock className="w-3.5 h-3.5 adm-text-muted opacity-40 inline-block" />
                     )}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
+        )}
       </div>
-      )}
 
-      {/* Create Modal */}
-      {isCreateModalOpen && (
-        <div className="fixed inset-0 adm-modal-overlay backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="w-full max-w-md adm-modal-bg border rounded-2xl shadow-2xl overflow-hidden flex flex-col">
-            <div className="p-5 border-b adm-border flex items-center justify-between">
-              <div>
-                <span className="text-[10px] uppercase tracking-wider text-teal-600 dark:text-teal-300 font-semibold">
-                  Taxonomy
-                </span>
-                <h3 className="text-base font-serif font-medium adm-text-primary">Create Category</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsCreateModalOpen(false)}
-                className="p-1.5 rounded-lg adm-text-muted hover:adm-text-primary"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateCategory} className="p-5 space-y-4">
-              <div>
-                <label className="block text-[11px] uppercase tracking-wider adm-text-muted font-medium mb-1.5">
-                  Category Name *
-                </label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => handleNameChange(e.target.value)}
-                  placeholder="e.g. Dinnerware"
-                  className="w-full px-3.5 py-2 adm-input border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] uppercase tracking-wider adm-text-muted font-medium mb-1.5">
-                  Slug
-                </label>
-                <input
-                  type="text"
-                  value={slug}
-                  onChange={(e) => setSlug(e.target.value)}
-                  placeholder="dinnerware"
-                  className="w-full px-3.5 py-2 adm-input border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] uppercase tracking-wider adm-text-muted font-medium mb-1.5">
-                  Editorial Description
-                </label>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Reduction-fired stoneware plates, serving bowls, and banqueting platters."
-                  rows={3}
-                  className="w-full px-3.5 py-2 adm-input border rounded-xl text-xs focus:outline-none focus:border-[#424a70] resize-none"
-                />
-              </div>
-
-              <div className="pt-2 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsCreateModalOpen(false)}
-                  className="px-3.5 py-2 rounded-xl text-xs adm-text-muted hover:adm-text-primary"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2.5 adm-btn-primary rounded-xl text-xs flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Create Category</span>
-                </button>
-              </div>
-            </form>
-          </div>
+      <AdminModal
+        open={open}
+        title={editing ? `Edit ${editing.name}` : 'New category'}
+        onClose={() => setOpen(false)}
+        footer={
+          <>
+            <button type="button" onClick={() => setOpen(false)} className="px-4 py-2 rounded-xl border adm-border text-xs">
+              Cancel
+            </button>
+            <button type="button" onClick={save} disabled={saving || !form.name.trim()} className="px-4 py-2 rounded-xl adm-btn-primary text-xs disabled:opacity-50">
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+          </>
+        }
+      >
+        <Field id="cat-name" label="Name" error={errors.name}>
+          <input
+            id="cat-name"
+            className={inputCls}
+            value={form.name}
+            maxLength={80}
+            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value, ...(!slugTouched && { slug: slugify(e.target.value) }) }))}
+          />
+        </Field>
+        <Field id="cat-slug" label="URL slug" error={errors.slug} hint="Lowercase letters, numbers and dashes">
+          <input
+            id="cat-slug"
+            className={`${inputCls} font-mono`}
+            value={form.slug}
+            onChange={(e) => {
+              setSlugTouched(true)
+              setForm((f) => ({ ...f, slug: e.target.value }))
+            }}
+          />
+        </Field>
+        <Field id="cat-desc" label="Description" error={errors.description}>
+          <textarea id="cat-desc" rows={3} className={inputCls} value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
+        </Field>
+        <Field id="cat-img" label="Image URL" error={errors.imageUrl} hint="Copy a path from the Media library, e.g. /uploads/…">
+          <input id="cat-img" className={inputCls} value={form.imageUrl} onChange={(e) => setForm((f) => ({ ...f, imageUrl: e.target.value }))} />
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field id="cat-status" label="Status" error={errors.status}>
+            <select id="cat-status" className={inputCls} value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as Category['status'] }))}>
+              <option value="PUBLISHED">Published</option>
+              <option value="DRAFT">Draft</option>
+              <option value="ARCHIVED">Archived</option>
+            </select>
+          </Field>
+          <Field id="cat-order" label="Display order" error={errors.sortOrder}>
+            <input id="cat-order" type="number" min={0} className={inputCls} value={form.sortOrder} onChange={(e) => setForm((f) => ({ ...f, sortOrder: e.target.value }))} />
+          </Field>
         </div>
-      )}
+      </AdminModal>
     </div>
   )
 }

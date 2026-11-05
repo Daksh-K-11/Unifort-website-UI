@@ -2,7 +2,9 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import Image from 'next/image'
-import { api } from '@/lib/api-client'
+import { api, mediaUrl } from '@/lib/api-client'
+import { notify, confirmAction } from '../admin-ui'
+import { useAdminAuth } from '../admin-auth-context'
 import {
   UploadCloud,
   Search,
@@ -61,13 +63,14 @@ export function MediaLibraryView({
   const [isSavingAsset, setIsSavingAsset] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const { canDeleteMedia } = useAdminAuth()
 
   const fetchAssets = async () => {
     setLoading(true)
-    const res = await api.get<MediaAssetItem[]>('/media?limit=100', {}, true)
+    const res = await api.get<any[]>('/media?limit=100')
     if (res.success && Array.isArray(res.data)) {
-      setAssets(res.data)
-    }
+      setAssets(res.data.map((a) => ({ ...a, metadata: { ...(a.metadata || {}), usedByProducts: (a.usedBy || []).map((p: any) => p.name) } })))
+    } else notify(res)
     setLoading(false)
   }
 
@@ -80,48 +83,24 @@ export function MediaLibraryView({
     setIsUploading(true)
     setUploadError(null)
 
-    try {
-      const reader = new FileReader()
-      reader.onload = async () => {
-        const base64Data = reader.result as string
-        const res = await api.post<MediaAssetItem>(
-          '/media/upload',
-          {
-            data: base64Data,
-            filename: file.name,
-            category: 'product',
-          },
-          {},
-          true
-        )
-
-        if (res.success && res.data) {
-          setAssets((prev) => [res.data!, ...prev])
-          if (onSelectAsset) {
-            onSelectAsset(res.data.url)
-          }
-        } else {
-          setUploadError(res.message || 'Failed to upload media asset')
-        }
-        setIsUploading(false)
-      }
-      reader.readAsDataURL(file)
-    } catch (err: any) {
-      setUploadError(err.message || 'Error reading file')
-      setIsUploading(false)
+    const res = await api.upload('/media/upload', file, { category: 'product' })
+    setIsUploading(false)
+    if (res.success && res.data) {
+      setAssets((prev) => [{ ...res.data, metadata: { usedByProducts: [] } }, ...prev])
+      notify(res, 'File uploaded')
+      if (onSelectAsset) onSelectAsset(res.data.url)
+    } else {
+      setUploadError(res.message || 'Failed to upload media asset')
     }
   }
 
   const handleDelete = async (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation()
-    const confirm = window.confirm('Are you sure you want to delete this media asset from public assets and database?')
-    if (!confirm) return
-
+    if (!confirmAction('Delete this file permanently?')) return
+    const res = await api.delete(`/media/${id}`)
+    if (!notify(res, 'File deleted')) return
     setAssets((prev) => prev.filter((a) => a.id !== id))
-    if (selectedAsset?.id === id) {
-      setSelectedAsset(null)
-    }
-    await api.delete(`/media/${id}`, {}, true)
+    if (selectedAsset?.id === id) setSelectedAsset(null)
   }
 
   const handleCopyPath = (url: string, id: string, e?: React.MouseEvent) => {
@@ -152,11 +131,10 @@ export function MediaLibraryView({
       {
         originalName: editName.trim(),
         category: editCategory,
-      },
-      {},
-      true
+      }
     )
 
+    if (!res.success) notify(res)
     if (res.success && res.data) {
       const updated = res.data
       setAssets((prev) =>
@@ -223,7 +201,7 @@ export function MediaLibraryView({
             type="file"
             ref={fileInputRef}
             className="hidden"
-            accept="image/png,image/jpeg,image/webp,image/svg+xml"
+            accept="image/png,image/jpeg,image/webp,image/avif,.glb"
             onChange={(e) => {
               if (e.target.files?.[0]) {
                 handleFileUpload(e.target.files[0])
@@ -358,7 +336,7 @@ export function MediaLibraryView({
                 {/* Thumbnail Stage */}
                 <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-black/5 dark:bg-white/5 mb-2.5 flex items-center justify-center">
                   <Image
-                    src={asset.url}
+                    src={mediaUrl(asset.url)}
                     alt={asset.originalName}
                     fill
                     sizes="(max-width: 640px) 50vw, 20vw"
@@ -385,13 +363,14 @@ export function MediaLibraryView({
                       {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
                     </button>
 
-                    <button
+                    {canDeleteMedia && <button
                       onClick={(e) => handleDelete(asset.id, e)}
+                      aria-label={"Delete " + asset.originalName}
                       className="p-2 rounded-xl bg-white/90 text-rose-600 hover:scale-110 active:scale-95 transition-all shadow-md cursor-pointer"
                       title="Delete asset from disk and DB"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    </button>}
                   </div>
                 </div>
 
@@ -539,19 +518,19 @@ export function MediaLibraryView({
                 </div>
 
                 <div className="flex items-center justify-between pt-3 border-t adm-border">
-                  <button
+                  {canDeleteMedia ? <button
                     type="button"
                     onClick={() => handleDelete(selectedAsset.id)}
                     className="text-xs text-rose-600 hover:text-rose-700 font-medium flex items-center gap-1 cursor-pointer"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                     <span>Delete Asset</span>
-                  </button>
+                  </button> : <span />}
 
                   <div className="flex items-center gap-2">
                     {saveSuccess && (
                       <span className="text-xs text-emerald-600 font-medium flex items-center gap-1">
-                        <Check className="w-3.5 h-3.5" /> Saved to DB
+                        <Check className="w-3.5 h-3.5" /> Saved
                       </span>
                     )}
                     <button
@@ -559,7 +538,7 @@ export function MediaLibraryView({
                       disabled={isSavingAsset}
                       className="px-4 py-2 adm-btn-primary rounded-xl text-xs font-medium cursor-pointer"
                     >
-                      {isSavingAsset ? 'Saving...' : 'Update in DB'}
+                      {isSavingAsset ? 'Saving…' : 'Save'}
                     </button>
                   </div>
                 </div>

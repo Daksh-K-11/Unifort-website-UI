@@ -1,1499 +1,1121 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
-import Link from 'next/link'
+import React, { useEffect, useMemo, useState } from 'react'
 import Image from 'next/image'
+import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { toast } from 'sonner'
 import {
-  Package,
-  Sparkles,
-  Mail,
-  User,
-  Shield,
-  Clock,
-  CheckCircle2,
-  Truck,
-  RotateCcw,
-  ExternalLink,
-  ChevronRight,
-  ChevronLeft,
-  LogOut,
-  MapPin,
-  Lock,
-  Phone,
-  Copy,
-  Plus,
-  AlertCircle,
-  X,
-  Search,
-  ArrowLeft,
-  Calendar,
-  ArrowUpRight,
-  ShoppingBag,
-  FileText,
-  Star,
-  Check,
   ArrowRight,
+  ChevronDown,
+  Copy,
+  CreditCard,
+  Home,
+  LogOut,
+  Mail,
+  MapPin,
+  MessageSquare,
+  Package,
+  Pencil,
+  Plus,
+  Search,
+  ShieldCheck,
+  Sparkles,
+  Star,
+  Trash2,
+  Truck,
+  User,
+  X,
 } from 'lucide-react'
 import { useCustomer } from '@/lib/customer-context'
-import { useBag } from '@/lib/bag-context'
-import { CustomerOrder, CustomerSavedDesign, CustomerInquiry } from '@/lib/customer-types'
-import { UnifortButton } from '@/components/ui/UnifortButton'
+import type { CustomerAddress, CustomerOrder, CustomerSavedDesign } from '@/lib/customer-types'
+import { api, errorMessage, formatINR } from '@/lib/api-client'
+import { passwordProblem, PASSWORD_HINT } from './AuthForms'
+import { OrderProgress, StatusBadge, statusHelp } from './order-ui'
 
-type PortalView = 'hub' | 'orders' | 'designs' | 'inquiries' | 'profile'
+type View = 'overview' | 'orders' | 'designs' | 'messages' | 'profile'
 
-interface AccountPortalProps {
-  initialView?: 'hub' | 'orders' | 'designs' | 'inquiries' | 'profile' | 'track'
-}
+const TABS: { id: View; label: string; icon: React.ElementType }[] = [
+  { id: 'overview', label: 'Overview', icon: Home },
+  { id: 'orders', label: 'My orders', icon: Package },
+  { id: 'designs', label: 'My designs', icon: Sparkles },
+  { id: 'messages', label: 'Messages', icon: MessageSquare },
+  { id: 'profile', label: 'Profile & addresses', icon: User },
+]
 
-export function AccountPortal({ initialView }: AccountPortalProps) {
+const LEGACY_VIEW: Record<string, View> = { hub: 'overview', track: 'orders', inquiries: 'messages' }
+
+const fmtDate = (d?: string | null) => (d ? new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '')
+
+const card = 'rounded-2xl border border-[#424a70]/12 bg-white shadow-sm'
+const btnPrimary =
+  'inline-flex items-center justify-center gap-2 rounded-xl bg-[#424a70] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#363d5e] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#424a70] disabled:opacity-50'
+const btnSecondary =
+  'inline-flex items-center justify-center gap-2 rounded-xl border border-[#424a70]/25 bg-white px-4 py-2.5 text-sm font-medium text-[#1c2033] hover:bg-[#424a70]/5 disabled:opacity-50'
+const btnDanger = 'inline-flex items-center justify-center gap-2 rounded-xl border border-rose-300 bg-white px-4 py-2.5 text-sm font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-50'
+const inputCls = 'w-full rounded-xl border border-[#424a70]/20 bg-white px-3.5 py-2.5 text-sm text-[#1c2033] focus:border-[#424a70] focus:outline-none focus:ring-2 focus:ring-[#424a70]/15'
+const labelCls = 'mb-1 block text-xs font-medium text-[#3b4266]'
+
+export function AccountPortal({ initialView }: { initialView?: string }) {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { customer, isLoggedIn, authLoading } = useCustomer()
 
-  const {
-    customer,
-    isLoggedIn,
-    logout,
-    orders,
-    savedDesigns,
-    inquiries,
-    cancelOrder,
-    markOrderReceived,
-    duplicateBespokeDesign,
-    renameBespokeDesign,
-    deleteBespokeDesign,
-    updateProfile,
-    changePassword,
-    setAuthModalOpen,
-    trackConsignment,
-  } = useCustomer()
+  const raw = searchParams.get('view') || initialView || 'overview'
+  const view: View = (TABS.some((t) => t.id === raw) ? raw : LEGACY_VIEW[raw] || 'overview') as View
+  const go = (v: View) => router.push(v === 'overview' ? '/account' : `/account?view=${v}`, { scroll: false })
 
-  const { addToBag, setIsBagOpen, setToastMessage } = useBag()
-
-  // Multi-page navigation state driven by URL search params.
-  // Note: 'track' is seamlessly consolidated under 'orders'
-  const viewParam = searchParams.get('view')
-  const currentView: PortalView =
-    viewParam === 'orders' || viewParam === 'track'
-      ? 'orders'
-      : viewParam === 'designs'
-      ? 'designs'
-      : viewParam === 'inquiries'
-      ? 'inquiries'
-      : viewParam === 'profile'
-      ? 'profile'
-      : initialView === 'orders' || initialView === 'track'
-      ? 'orders'
-      : initialView === 'designs'
-      ? 'designs'
-      : initialView === 'inquiries'
-      ? 'inquiries'
-      : initialView === 'profile'
-      ? 'profile'
-      : 'hub'
-
-  const navigateToView = (view: PortalView) => {
-    if (view === 'hub') {
-      router.push('/account')
-    } else {
-      router.push(`/account?view=${view}`)
-    }
-  }
-
-  // Modals & Selection state
-  const [selectedOrder, setSelectedOrder] = useState<CustomerOrder | null>(null)
-  const [renamingDesign, setRenamingDesign] = useState<CustomerSavedDesign | null>(null)
-  const [newTitle, setNewTitle] = useState('')
-
-  // Profile Form State
-  const [profileName, setProfileName] = useState(customer?.name || '')
-  const [profilePhone, setProfilePhone] = useState(customer?.phone || '')
-  const [profileSuccess, setProfileSuccess] = useState('')
-
-  // Password Form State
-  const [currentPass, setCurrentPass] = useState('')
-  const [newPass, setNewPass] = useState('')
-  const [passSuccess, setPassSuccess] = useState('')
-  const [passError, setPassError] = useState('')
-
-  // Tracking State inside Acquisitions
-  const [trackingInput, setTrackingInput] = useState('')
-  const [trackingLoading, setTrackingLoading] = useState(false)
-  const [trackingResult, setTrackingResult] = useState<any>(null)
-  const [trackingError, setTrackingError] = useState<string | null>(null)
-  const [expandedTrackingOrderId, setExpandedTrackingOrderId] = useState<string | null>(null)
-  const [copiedWaybill, setCopiedWaybill] = useState(false)
-
-  // Sync profile details when customer object is hydrated
   useEffect(() => {
-    if (customer) {
-      setProfileName(customer.name || '')
-      setProfilePhone(customer.phone || '')
-    }
-  }, [customer])
+    if (!authLoading && !isLoggedIn) router.replace(`/login?next=${encodeURIComponent(`/account${raw !== 'overview' ? `?view=${raw}` : ''}`)}`)
+  }, [authLoading, isLoggedIn, router, raw])
 
-  // Automatically trigger tracking lookup if orderNumber is in URL
-  useEffect(() => {
-    const orderNumberFromUrl = searchParams.get('orderNumber') || searchParams.get('order')
-    if (orderNumberFromUrl) {
-      setTrackingInput(orderNumberFromUrl)
-      handlePerformTrack(orderNumberFromUrl)
-    }
-  }, [searchParams])
-
-  const handlePerformTrack = async (ref: string) => {
-    const q = ref.trim()
-    if (!q) return
-    setTrackingLoading(true)
-    setTrackingError(null)
-
-    const res = await trackConsignment(q)
-    setTrackingLoading(false)
-
-    if (res.success && res.data) {
-      setTrackingResult(res.data)
-      setExpandedTrackingOrderId(res.data.id || res.data.orderNumber)
-    } else {
-      setTrackingResult(null)
-      setTrackingError(res.message || `No consignment found for "${q}". Please verify the order reference or waybill number.`)
-    }
+  if (authLoading || !customer) {
+    return (
+      <main className="below-header flex min-h-[60vh] items-center justify-center" aria-busy="true">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#424a70] border-t-transparent" />
+      </main>
+    )
   }
 
-  const handleCopyWaybill = (waybill: string) => {
-    if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      navigator.clipboard.writeText(waybill)
-      setCopiedWaybill(true)
-      setTimeout(() => setCopiedWaybill(false), 2000)
-    }
-  }
+  return (
+    <main className="below-header min-h-screen bg-[#faf9fc] px-4 pb-16 text-[#1c2033] sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-6xl">
+        <header className="mb-6">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#687194]">My account</p>
+          <h1 className="mt-1 font-serif text-3xl sm:text-4xl">Hello, {customer.firstName || customer.name}</h1>
+        </header>
 
-  const handleUpdateProfile = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setProfileSuccess('')
-    const res = await updateProfile({ name: profileName, phone: profilePhone })
-    if (res.success) {
-      setProfileSuccess(res.message || 'Profile details updated.')
-      setTimeout(() => setProfileSuccess(''), 3500)
-    }
-  }
+        {!customer.emailVerified && <VerifyBanner />}
 
-  const handleChangePassword = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setPassError('')
-    setPassSuccess('')
-    const res = await changePassword({ currentPassword: currentPass, newPassword: newPass })
-    if (res.success) {
-      setPassSuccess(res.message || 'Passphrase updated successfully.')
-      setCurrentPass('')
-      setNewPass('')
-      setTimeout(() => setPassSuccess(''), 3500)
-    } else {
-      setPassError(res.message || 'Failed to update passphrase.')
-    }
-  }
+        <div className="grid gap-6 lg:grid-cols-[240px_1fr]">
+          {/* Navigation: horizontal scroll on phones, sidebar on desktop */}
+          <nav aria-label="Account sections" className="-mx-4 overflow-x-auto px-4 pb-1 lg:mx-0 lg:overflow-visible lg:px-0">
+            <ul className="flex gap-2 lg:sticky lg:top-24 lg:flex-col">
+              {TABS.map((t) => {
+                const Icon = t.icon
+                const active = view === t.id
+                return (
+                  <li key={t.id} className="shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => go(t.id)}
+                      aria-current={active ? 'page' : undefined}
+                      className={`flex w-full items-center gap-2.5 whitespace-nowrap rounded-xl px-4 py-2.5 text-sm font-medium transition-colors ${
+                        active ? 'bg-[#424a70] text-white shadow-sm' : 'bg-white text-[#1c2033] ring-1 ring-[#424a70]/12 hover:bg-[#424a70]/5'
+                      }`}
+                    >
+                      <Icon className="h-4 w-4" aria-hidden />
+                      {t.label}
+                    </button>
+                  </li>
+                )
+              })}
+              <li className="hidden lg:block lg:pt-4">
+                <SignOutButton />
+              </li>
+            </ul>
+          </nav>
 
-  const handleOrderCustomPiece = (design: CustomerSavedDesign) => {
-    addToBag({
-      name: `${design.title} (Bespoke)`,
-      type: `${(design.modelType || 'STONEWARE').toUpperCase()} · Handcrafted Glaze · ${design.finish || 'Mineral Satin'}`,
-      price: '₹148',
-      image: '/products/unifort-plate-light.jpg',
-      category: 'Bespoke Studio',
-    })
-    setIsBagOpen(true)
-    setToastMessage(`Added "${design.title}" to your order bag`)
-  }
+          <section className="min-w-0">
+            {view === 'overview' && <Overview go={go} />}
+            {view === 'orders' && <Orders />}
+            {view === 'designs' && <Designs />}
+            {view === 'messages' && <Messages />}
+            {view === 'profile' && <Profile />}
+            <div className="mt-8 lg:hidden">
+              <SignOutButton />
+            </div>
+          </section>
+        </div>
+      </div>
+    </main>
+  )
+}
 
-  const handleSaveRename = async () => {
-    if (!renamingDesign || !newTitle.trim()) return
-    await renameBespokeDesign(renamingDesign.id, newTitle.trim())
-    setRenamingDesign(null)
-    setNewTitle('')
-  }
+/* ------------------------------------------------------------------ */
 
-  // High-contrast status badges in light and dark mode
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'CONFIRMED':
-        return 'bg-blue-100 text-blue-900 border border-blue-300 font-semibold'
-      case 'PROCESSING':
-        return 'bg-amber-100 text-amber-900 border border-amber-300 font-semibold'
-      case 'SHIPPED':
-        return 'bg-indigo-100 text-indigo-900 border border-indigo-300 font-semibold'
-      case 'DELIVERED':
-        return 'bg-emerald-100 text-emerald-900 border border-emerald-300 font-semibold'
-      case 'CANCELLED':
-        return 'bg-rose-100 text-rose-900 border border-rose-300 font-semibold'
-      case 'PENDING':
-      default:
-        return 'bg-amber-100 text-amber-900 border border-amber-300 font-semibold'
-    }
-  }
+function SignOutButton() {
+  const { logout } = useCustomer()
+  const router = useRouter()
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        await logout()
+        router.replace('/')
+      }}
+      className="flex w-full items-center gap-2.5 rounded-xl px-4 py-2.5 text-sm font-medium text-rose-700 hover:bg-rose-50"
+    >
+      <LogOut className="h-4 w-4" aria-hidden /> Sign out
+    </button>
+  )
+}
 
-  // Portal Hub feature items (tracked internally without standalone Track Order card)
-  const portalItems = [
-    {
-      id: 'orders',
-      title: 'Acquisitions & Consignments',
-      eyebrow: 'Provenance & Deliveries',
-      description: 'Review permanent tableware orders, live courier progress, waybills, and manifests.',
-      badge: `${orders.length} Orders`,
-      badgeClass: 'bg-emerald-100 text-emerald-900 border border-emerald-300',
-      icon: <Package className="w-5 h-5" />,
-      actionLabel: `View Acquisitions (${orders.length})`,
-      onClick: () => navigateToView('orders'),
-    },
-    {
-      id: 'designs',
-      title: '3D Bespoke Pieces',
-      eyebrow: 'Kiln Formulations',
-      description: 'Browse saved reduction glazes, ceramic stamps, and re-order custom tableware pieces.',
-      badge: `${savedDesigns.length} Pieces`,
-      badgeClass: 'bg-purple-100 text-purple-900 border border-purple-300',
-      icon: <Sparkles className="w-5 h-5" />,
-      actionLabel: `View Bespoke Queue (${savedDesigns.length})`,
-      onClick: () => navigateToView('designs'),
-    },
-    {
-      id: 'inquiries',
-      title: 'Hospitality & Trade Quotes',
-      eyebrow: 'Trade Desk',
-      description: 'Track custom banquet proposals, restaurant opening suites, and studio correspondence.',
-      badge: `${inquiries.length} Quotes`,
-      badgeClass: 'bg-amber-100 text-amber-900 border border-amber-300',
-      icon: <Mail className="w-5 h-5" />,
-      actionLabel: `Review Inquiries (${inquiries.length})`,
-      onClick: () => navigateToView('inquiries'),
-    },
-    {
-      id: 'profile',
-      title: 'Registry & Security',
-      eyebrow: 'Patron Registry',
-      description: 'Update patron contact coordinates, delivery phone, and manage passphrase access keys.',
-      badge: 'Protected',
-      badgeClass: 'bg-slate-100 text-slate-800 border border-slate-300',
-      icon: <Shield className="w-5 h-5" />,
-      actionLabel: 'Security Credentials',
-      onClick: () => navigateToView('profile'),
-    },
-    {
-      id: 'studio',
-      title: 'Launch 3D Studio',
-      eyebrow: 'Interactive Kiln',
-      description: 'Formulate mineral glazes and inspect reduction stoneware in real-time 3D.',
-      badge: '3D WebGL',
-      badgeClass: 'bg-indigo-100 text-indigo-900 border border-indigo-300',
-      icon: <Sparkles className="w-5 h-5" />,
-      actionLabel: 'Launch 3D Studio',
-      onClick: () => router.push('/customize'),
-    },
+function VerifyBanner() {
+  const { resendVerification } = useCustomer()
+  const [sent, setSent] = useState(false)
+  return (
+    <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 sm:flex-row sm:items-center sm:justify-between">
+      <p className="flex items-start gap-2">
+        <Mail className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+        Please confirm your email address so we can send you order updates.
+      </p>
+      <button
+        type="button"
+        disabled={sent}
+        onClick={async () => {
+          const r = await resendVerification()
+          if (r.success) {
+            setSent(true)
+            toast.success('Verification email sent')
+          } else toast.error(r.message || 'Could not send the email')
+        }}
+        className="shrink-0 rounded-xl bg-amber-900 px-4 py-2 text-sm font-medium text-white hover:bg-amber-950 disabled:opacity-60"
+      >
+        {sent ? 'Email sent' : 'Resend email'}
+      </button>
+    </div>
+  )
+}
+
+function SectionTitle({ title, subtitle, action }: { title: string; subtitle?: string; action?: React.ReactNode }) {
+  return (
+    <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <h2 className="font-serif text-2xl">{title}</h2>
+        {subtitle && <p className="mt-0.5 text-sm text-[#687194]">{subtitle}</p>}
+      </div>
+      {action}
+    </div>
+  )
+}
+
+function Empty({ icon: Icon, title, text, action }: { icon: React.ElementType; title: string; text: string; action?: React.ReactNode }) {
+  return (
+    <div className={`${card} flex flex-col items-center px-6 py-12 text-center`}>
+      <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#424a70]/10 text-[#424a70]">
+        <Icon className="h-6 w-6" aria-hidden />
+      </div>
+      <h3 className="text-base font-semibold">{title}</h3>
+      <p className="mt-1 max-w-sm text-sm text-[#687194]">{text}</p>
+      {action && <div className="mt-5">{action}</div>}
+    </div>
+  )
+}
+
+function Loading() {
+  return (
+    <div className={`${card} flex justify-center py-14`} aria-busy="true">
+      <div className="h-7 w-7 animate-spin rounded-full border-2 border-[#424a70] border-t-transparent" />
+    </div>
+  )
+}
+
+/* ------------------------------ Overview ------------------------------ */
+
+function Overview({ go }: { go: (v: View) => void }) {
+  const { orders, ordersLoading, savedDesigns, inquiries } = useCustomer()
+  const active = orders.filter((o) => !['DELIVERED', 'CANCELLED', 'REFUNDED'].includes(o.status))
+  const latest = active[0] || orders[0]
+  const needsPayment = orders.filter((o) => o.canPay)
+
+  const stats = [
+    { label: 'Orders in progress', value: active.length, view: 'orders' as View, icon: Truck },
+    { label: 'Saved designs', value: savedDesigns.length, view: 'designs' as View, icon: Sparkles },
+    { label: 'Messages', value: inquiries.length, view: 'messages' as View, icon: MessageSquare },
   ]
 
   return (
-    <main className="page min-h-screen bg-[#faf9fc] text-[#1c2033] py-8 sm:py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-6xl mx-auto space-y-6 sm:space-y-8">
-        {/* ================= PATRON HEADER BANNER ================= */}
-        <section className="bg-white border border-[#424a70]/15 rounded-3xl p-5 sm:p-7 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-5 sm:gap-6">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-[#424a70] !text-white [&_*]:!text-white flex items-center justify-center text-lg sm:text-xl font-serif font-medium shrink-0 shadow-xs">
-              {customer
-                ? customer.name
-                    .split(' ')
-                    .map((n) => n[0])
-                    .join('')
-                    .toUpperCase() || 'P'
-                : 'G'}
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] uppercase tracking-[0.2em] font-semibold text-[#424a70]">
-                  Patron Registry · UNIFORT
-                </span>
-                {isLoggedIn ? (
-                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300 text-[10px] font-mono font-semibold">
-                    Authenticated Patron
-                  </span>
-                ) : (
-                  <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-mono font-semibold">
-                    Guest Session
-                  </span>
-                )}
-              </div>
-              <h1 className="text-xl sm:text-2xl lg:text-3xl font-serif font-medium text-[#1c2033] mt-1">
-                {customer ? customer.name : 'Atelier Guest Patron'}
-              </h1>
-              <p className="text-xs text-[#424a70]/70 mt-0.5">
-                {customer
-                  ? `${customer.email} · ${customer.phone || 'No phone recorded'}`
-                  : 'Track consignments, manage bespoke glazes, and review acquisitions'}
-              </p>
-            </div>
-          </div>
+    <div className="space-y-6">
+      {needsPayment.length > 0 && (
+        <div className="flex flex-col gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-amber-950">
+            <strong>{needsPayment.length === 1 ? 'One order is' : `${needsPayment.length} orders are`} waiting for payment.</strong> Items are reserved for a limited time.
+          </p>
+          <Link href={`/orders/${encodeURIComponent(needsPayment[0].orderNumber)}`} className="shrink-0 rounded-xl bg-amber-900 px-4 py-2 text-center text-sm font-medium text-white hover:bg-amber-950">
+            Complete payment
+          </Link>
+        </div>
+      )}
 
-          {/* Quick Metrics & Actions */}
-          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-            <button
-              onClick={() => navigateToView('orders')}
-              className="px-3.5 py-2 rounded-xl bg-[#424a70]/5 border border-[#424a70]/15 text-center hover:bg-[#424a70]/10 transition-colors"
-            >
-              <span className="block text-base font-serif font-bold text-[#424a70]">
-                {orders.length}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 [&>*]:min-w-0">
+        {stats.map((s) => {
+          const Icon = s.icon
+          return (
+            <button key={s.label} type="button" onClick={() => go(s.view)} className={`${card} flex items-center gap-4 p-4 text-left transition-colors hover:border-[#424a70]/40`}>
+              <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#424a70]/10 text-[#424a70]">
+                <Icon className="h-5 w-5" aria-hidden />
               </span>
-              <span className="text-[10px] uppercase tracking-wider text-[#424a70]/70">
-                Orders
-              </span>
-            </button>
-            <button
-              onClick={() => navigateToView('designs')}
-              className="px-3.5 py-2 rounded-xl bg-[#424a70]/5 border border-[#424a70]/15 text-center hover:bg-[#424a70]/10 transition-colors"
-            >
-              <span className="block text-base font-serif font-bold text-[#424a70]">
-                {savedDesigns.length}
-              </span>
-              <span className="text-[10px] uppercase tracking-wider text-[#424a70]/70">
-                Bespoke
+              <span>
+                <span className="block text-2xl font-semibold">{s.value}</span>
+                <span className="text-sm text-[#687194]">{s.label}</span>
               </span>
             </button>
-            <button
-              onClick={() => navigateToView('inquiries')}
-              className="px-3.5 py-2 rounded-xl bg-[#424a70]/5 border border-[#424a70]/15 text-center hover:bg-[#424a70]/10 transition-colors"
-            >
-              <span className="block text-base font-serif font-bold text-[#424a70]">
-                {inquiries.length}
-              </span>
-              <span className="text-[10px] uppercase tracking-wider text-[#424a70]/70">
-                Quotes
-              </span>
-            </button>
+          )
+        })}
+      </div>
 
-            {isLoggedIn ? (
-              <UnifortButton
-                variant="outline"
-                size="sm"
-                icon={<LogOut className="w-3.5 h-3.5" />}
-                onClick={logout}
-                title="Sign Out of Atelier"
-                className="hover:!text-red-600 hover:!border-red-400 shrink-0"
-              >
-                Sign Out
-              </UnifortButton>
-            ) : (
-              <button
-                onClick={() => setAuthModalOpen('login')}
-                className="px-4 py-2 rounded-xl bg-[#424a70] !text-white [&_*]:!text-white text-xs font-medium hover:bg-[#4f5987] transition-all shrink-0 shadow-xs"
-              >
-                Sign In
+      <div>
+        <SectionTitle
+          title={active.length ? 'Your latest order' : 'Recent order'}
+          action={
+            orders.length > 0 && (
+              <button type="button" onClick={() => go('orders')} className="inline-flex items-center gap-1 text-sm font-medium text-[#424a70] hover:underline">
+                See all orders <ArrowRight className="h-4 w-4" aria-hidden />
               </button>
-            )}
-          </div>
-        </section>
-
-        {/* ================= TRUE PAGE HEADER WITH BACK BUTTON (NO TABS) ================= */}
-        {currentView !== 'hub' && (
-          <div className="flex items-center justify-between gap-3 pb-3 border-b border-[#424a70]/12">
-            <button
-              onClick={() => navigateToView('hub')}
-              className="inline-flex items-center gap-2 text-xs font-semibold text-[#424a70] hover:text-[#1c2033] transition-colors py-2 px-3.5 rounded-xl bg-white border border-[#424a70]/15 hover:bg-[#424a70]/5 shadow-xs"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span>Return to Profile Hub</span>
-            </button>
-            <div className="text-[11px] text-[#424a70]/60 font-mono hidden sm:block">
-              Patron Portal /{' '}
-              <span className="text-[#1c2033] font-semibold uppercase">
-                {currentView === 'orders'
-                  ? 'Acquisitions & Consignments'
-                  : currentView === 'designs'
-                  ? '3D Bespoke Studio Pieces'
-                  : currentView === 'inquiries'
-                  ? 'Hospitality Quotes'
-                  : 'Registry & Security'}
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* ================= PAGE 0: PROFILE HUB ================= */}
-        {currentView === 'hub' && (
-          <div className="space-y-6 sm:space-y-8">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-              <div>
-                <h2 className="text-xl sm:text-2xl font-serif font-medium text-[#1c2033]">
-                  Atelier Service Portals
-                </h2>
-                <p className="text-xs text-[#424a70]/70 mt-0.5">
-                  Select a department to manage your tableware acquisitions, 3D glazes, trade quotes, or account registry.
-                </p>
-              </div>
-            </div>
-
-            {/* MOBILE PHONE VIEW: SLEEK VERTICAL LIST MANNER */}
-            <div className="md:hidden bg-white border border-[#424a70]/15 rounded-3xl overflow-hidden divide-y divide-[#424a70]/10 shadow-xs">
-              {portalItems.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={item.onClick}
-                  className="w-full p-4 sm:p-5 flex items-center justify-between text-left hover:bg-[#424a70]/5 transition-colors group"
-                >
-                  <div className="flex items-center gap-3.5 min-w-0 pr-2">
-                    <div className="w-11 h-11 rounded-2xl bg-[#424a70] !text-white [&_*]:!text-white flex items-center justify-center shrink-0 shadow-xs group-hover:scale-105 transition-transform">
-                      {item.icon}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-sm font-serif font-semibold text-[#1c2033] group-hover:text-[#424a70] transition-colors truncate">
-                          {item.title}
-                        </h3>
-                        {item.badge && (
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold shrink-0 ${item.badgeClass}`}>
-                            {item.badge}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-[#424a70]/70 truncate mt-0.5">
-                        {item.description}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="shrink-0 flex items-center text-[#424a70]/40 group-hover:text-[#424a70] group-hover:translate-x-0.5 transition-all">
-                    <ChevronRight className="w-5 h-5" />
-                  </div>
-                </button>
-              ))}
-            </div>
-
-            {/* DESKTOP VIEW: ARCHITECTURAL CARDS GRID */}
-            <div className="hidden md:grid md:grid-cols-2 gap-5">
-              {portalItems.map((item) => (
-                <div
-                  key={item.id}
-                  onClick={item.onClick}
-                  className="group cursor-pointer bg-white border border-[#424a70]/15 rounded-3xl p-6 shadow-xs hover:border-[#424a70] hover:shadow-md transition-all flex flex-col justify-between"
-                >
-                  <div className="space-y-3">
-                    <div className="w-12 h-12 rounded-2xl bg-[#424a70] !text-white [&_*]:!text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform">
-                      {item.icon}
-                    </div>
-                    <div>
-                      <span className="text-[10px] uppercase tracking-[0.2em] font-semibold text-[#424a70]">
-                        {item.eyebrow}
-                      </span>
-                      <h3 className="text-lg font-serif font-medium text-[#1c2033] mt-0.5 group-hover:text-[#424a70] transition-colors">
-                        {item.title}
-                      </h3>
-                    </div>
-                    <p className="text-xs text-[#424a70]/75 leading-relaxed">
-                      {item.description}
-                    </p>
-                  </div>
-                  <div className="pt-5 mt-4 border-t border-[#424a70]/10 flex items-center justify-between">
-                    <span className="text-xs font-semibold text-[#424a70] flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-                      {item.actionLabel} <ArrowRight className="w-3.5 h-3.5" />
-                    </span>
-                    {item.badge && (
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-medium ${item.badgeClass}`}>
-                        {item.badge}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Quick Recent Activity Preview on Hub */}
-            {orders.length > 0 && (
-              <div className="bg-white border border-[#424a70]/15 rounded-3xl p-5 sm:p-6 shadow-xs space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div>
-                    <span className="text-[10px] uppercase tracking-wider text-[#424a70] font-semibold">
-                      Recent Consignment Activity
-                    </span>
-                    <h3 className="text-base font-serif font-medium text-[#1c2033]">
-                      Latest Consignment: {orders[0].orderNumber}
-                    </h3>
-                  </div>
-                  <button
-                    onClick={() => {
-                      navigateToView('orders')
-                      setExpandedTrackingOrderId(orders[0].id)
-                      handlePerformTrack(orders[0].orderNumber)
-                    }}
-                    className="px-3.5 py-1.5 rounded-xl bg-[#424a70] !text-white [&_*]:!text-white text-xs font-medium hover:bg-[#4f5987] transition-all flex items-center gap-1.5 shadow-xs self-start sm:self-auto"
-                  >
-                    <Truck className="w-3.5 h-3.5" />
-                    <span>Track Live</span>
-                  </button>
-                </div>
-
-                <div className="p-4 rounded-2xl bg-[#faf9fc] border border-[#424a70]/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-mono text-xs font-bold text-[#424a70]">
-                        {orders[0].orderNumber}
-                      </span>
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono ${getStatusBadge(orders[0].status)}`}>
-                        {orders[0].status}
-                      </span>
-                      {orders[0].trackingNumber && (
-                        <span className="text-[10px] font-mono text-[#424a70]/80">
-                          Waybill: {orders[0].trackingNumber}
-                        </span>
-                      )}
-                    </div>
-                    <span className="text-[11px] text-[#424a70]/60 block mt-1">
-                      {orders[0].items.length} piece(s) · Placed on{' '}
-                      {new Date(orders[0].createdAt).toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric',
-                      })}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setSelectedOrder(orders[0])}
-                      className="px-3 py-1.5 rounded-xl bg-white border border-[#424a70]/20 text-xs font-medium text-[#424a70] hover:bg-[#424a70]/5 transition-colors"
-                    >
-                      Receipt
-                    </button>
-                    <button
-                      onClick={() => navigateToView('orders')}
-                      className="px-3 py-1.5 rounded-xl bg-white border border-[#424a70]/20 text-xs font-medium text-[#424a70] hover:bg-[#424a70]/5 transition-colors"
-                    >
-                      All Orders ({orders.length}) →
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ================= PAGE 1: ACQUISITIONS & CONSIGNMENTS (WITH INTEGRATED TRACKING) ================= */}
-        {currentView === 'orders' && (
-          <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <h2 className="text-xl font-serif font-medium text-[#1c2033]">
-                  Acquisitions & Consignments
-                </h2>
-                <p className="text-xs text-[#424a70]/70">
-                  Review historical tableware orders, live courier progress, waybills, and manifests.
-                </p>
-              </div>
-
-              <Link
-                href="/collection"
-                className="px-4 py-2 bg-[#424a70] !text-white [&_*]:!text-white text-xs font-medium rounded-xl shadow-xs hover:bg-[#4f5987] transition-all flex items-center gap-1.5 self-start sm:self-auto"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Acquire Pieces</span>
+            )
+          }
+        />
+        {ordersLoading && orders.length === 0 ? (
+          <Loading />
+        ) : latest ? (
+          <OrderCard order={latest} defaultOpen={false} />
+        ) : (
+          <Empty
+            icon={Package}
+            title="No orders yet"
+            text="When you place an order it will appear here with live delivery updates."
+            action={
+              <Link href="/collection" className={btnPrimary}>
+                Start shopping
               </Link>
-            </div>
-
-            {/* Quick Waybill / Reference Tracker Search Bar */}
-            <div className="bg-white border border-[#424a70]/15 rounded-3xl p-4 sm:p-5 shadow-xs space-y-3">
-              <span className="text-[10px] uppercase tracking-wider text-[#424a70] font-semibold block">
-                Track Any Consignment Waybill or Reference
-              </span>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault()
-                  handlePerformTrack(trackingInput)
-                }}
-                className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5"
-              >
-                <div className="relative flex-1">
-                  <Search className="w-4 h-4 text-[#424a70]/50 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    value={trackingInput}
-                    onChange={(e) => setTrackingInput(e.target.value)}
-                    placeholder="Enter Order # (e.g. UNI-2026-0001) or Waybill (e.g. UNI-AIR-0001)"
-                    className="w-full pl-10 pr-3 py-2.5 bg-[#faf9fc] border border-[#424a70]/20 rounded-xl text-xs font-mono text-[#1c2033] focus:outline-none focus:border-[#424a70]"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  disabled={trackingLoading || !trackingInput.trim()}
-                  className="px-5 py-2.5 rounded-xl bg-[#424a70] !text-white [&_*]:!text-white text-xs font-medium hover:bg-[#4f5987] transition-all flex items-center justify-center gap-1.5 shadow-xs disabled:opacity-50 shrink-0"
-                >
-                  {trackingLoading ? (
-                    <div className="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" />
-                  ) : (
-                    <Truck className="w-3.5 h-3.5" />
-                  )}
-                  <span>Track Status</span>
-                </button>
-              </form>
-
-              {trackingError && (
-                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
-                  <span>{trackingError}</span>
-                </div>
-              )}
-
-              {/* Real-time Tracking Result View */}
-              {trackingResult && (
-                <div className="p-4 sm:p-5 rounded-2xl bg-blue-50/50 border border-blue-200/80 space-y-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-blue-200/60 pb-3">
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-mono text-xs sm:text-sm font-bold text-[#424a70]">
-                          {trackingResult.orderNumber}
-                        </span>
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono ${getStatusBadge(trackingResult.status)}`}>
-                          {trackingResult.status}
-                        </span>
-                        {trackingResult.trackingNumber && (
-                          <span className="text-[10px] font-mono text-[#424a70] font-semibold">
-                            Waybill: {trackingResult.trackingNumber}
-                          </span>
-                        )}
-                      </div>
-                      <span className="text-[11px] text-[#424a70]/70 block mt-0.5">
-                        Carrier: {trackingResult.carrier || 'BlueDart Atelier Courier'} · Estimated: {trackingResult.estimatedDelivery || 'In 3–5 Business Days'}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {trackingResult.trackingNumber && (
-                        <button
-                          onClick={() => handleCopyWaybill(trackingResult.trackingNumber)}
-                          className="px-2.5 py-1 rounded-lg bg-white border border-[#424a70]/20 text-[10px] font-mono text-[#424a70] hover:bg-[#424a70]/5 flex items-center gap-1"
-                        >
-                          {copiedWaybill ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                          <span>{copiedWaybill ? 'Copied' : 'Copy Waybill'}</span>
-                        </button>
-                      )}
-                      <button
-                        onClick={() => setTrackingResult(null)}
-                        className="p-1 rounded-lg hover:bg-neutral-200/60 text-neutral-500"
-                        title="Dismiss Tracking"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Tracking Stepper */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                    {(trackingResult.stages || [
-                      { label: 'Consignment Placed', completed: true, current: trackingResult.status === 'PENDING' },
-                      { label: 'Kiln Production', completed: trackingResult.status !== 'PENDING' && trackingResult.status !== 'CANCELLED', current: trackingResult.status === 'CONFIRMED' || trackingResult.status === 'PROCESSING' },
-                      { label: 'Dispatched via Air', completed: trackingResult.status === 'SHIPPED' || trackingResult.status === 'DELIVERED', current: trackingResult.status === 'SHIPPED' },
-                      { label: 'Delivered', completed: trackingResult.status === 'DELIVERED', current: trackingResult.status === 'DELIVERED' },
-                    ]).map((stg: any, idx: number) => (
-                      <div
-                        key={idx}
-                        className={`p-2.5 rounded-xl border text-center flex flex-col items-center gap-1.5 ${
-                          stg.current
-                            ? 'bg-blue-100/70 border-blue-300 font-semibold'
-                            : stg.completed
-                            ? 'bg-emerald-50 border-emerald-200'
-                            : 'bg-white border-[#424a70]/10 opacity-60'
-                        }`}
-                      >
-                        <div
-                          className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                            stg.completed
-                              ? 'bg-emerald-600 !text-white [&_*]:!text-white'
-                              : stg.current
-                              ? 'bg-[#424a70] !text-white [&_*]:!text-white animate-pulse'
-                              : 'bg-[#424a70]/10 text-[#424a70]/60'
-                          }`}
-                        >
-                          {stg.completed ? <Check className="w-3 h-3" /> : idx + 1}
-                        </div>
-                        <span className="text-[10px] font-medium text-[#1c2033] leading-tight">
-                          {stg.label}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Orders List */}
-            {orders.length === 0 ? (
-              <div className="p-12 bg-white border border-[#424a70]/15 rounded-3xl text-center space-y-3">
-                <Package className="w-10 h-10 text-[#424a70]/40 mx-auto" />
-                <h3 className="text-base font-serif font-medium text-[#1c2033]">
-                  No Acquisitions Recorded Yet
-                </h3>
-                <p className="text-xs text-[#424a70]/70 max-w-sm mx-auto leading-relaxed">
-                  When you acquire pieces from our permanent collection or place custom reduction tableware orders, your orders and tracking stream here.
-                </p>
-                <div className="pt-2">
-                  <Link
-                    href="/collection"
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#424a70] !text-white [&_*]:!text-white text-xs font-medium hover:bg-[#4f5987] transition-all shadow-xs"
-                  >
-                    <span>Explore Permanent Collection</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </Link>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {orders.map((order) => {
-                  const steps = [
-                    { key: 'CONFIRMED', label: 'Order Confirmed' },
-                    { key: 'PROCESSING', label: 'Kiln Production' },
-                    { key: 'SHIPPED', label: 'Dispatched' },
-                    { key: 'DELIVERED', label: 'Delivered' },
-                  ]
-
-                  const currentStepIdx =
-                    order.status === 'DELIVERED'
-                      ? 3
-                      : order.status === 'SHIPPED'
-                      ? 2
-                      : order.status === 'PROCESSING'
-                      ? 1
-                      : 0
-
-                  const isExpandedTracking = expandedTrackingOrderId === order.id
-
-                  return (
-                    <div
-                      key={order.id}
-                      className="bg-white border border-[#424a70]/15 rounded-3xl p-5 sm:p-6 shadow-xs space-y-5 transition-all hover:border-[#424a70]/30"
-                    >
-                      {/* Order Header */}
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#424a70]/10 pb-4">
-                        <div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-mono text-xs font-bold text-[#424a70]">
-                              {order.orderNumber}
-                            </span>
-                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono ${getStatusBadge(order.status)}`}>
-                              {order.status}
-                            </span>
-                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono bg-emerald-100 text-emerald-900 border border-emerald-300 font-semibold">
-                              Payment: {order.paymentStatus} ({order.paymentMethod})
-                            </span>
-                          </div>
-                          <span className="text-[11px] text-[#424a70]/60 mt-1 block">
-                            Placed on {new Date(order.createdAt).toLocaleDateString('en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                              year: 'numeric',
-                            })}
-                          </span>
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-lg font-serif font-bold text-[#1c2033] mr-2">
-                            ₹{order.totalAmount.toLocaleString()}
-                          </span>
-
-                          <button
-                            onClick={() => {
-                              if (isExpandedTracking) {
-                                setExpandedTrackingOrderId(null)
-                              } else {
-                                setExpandedTrackingOrderId(order.id)
-                                handlePerformTrack(order.orderNumber)
-                              }
-                            }}
-                            className="px-3 py-1.5 rounded-xl bg-[#424a70] !text-white [&_*]:!text-white text-xs font-medium hover:bg-[#4f5987] transition-all flex items-center gap-1.5 shadow-xs"
-                          >
-                            <Truck className="w-3.5 h-3.5" />
-                            <span>{isExpandedTracking ? 'Hide Tracking' : 'Track Delivery'}</span>
-                          </button>
-
-                          <button
-                            onClick={() => setSelectedOrder(order)}
-                            className="px-3 py-1.5 rounded-xl bg-white border border-[#424a70]/20 text-xs font-medium text-[#424a70] hover:bg-[#424a70]/5 transition-colors"
-                          >
-                            Receipt
-                          </button>
-
-                          {order.status !== 'DELIVERED' && order.status !== 'CANCELLED' && (
-                            <button
-                              onClick={() => markOrderReceived(order.id)}
-                              className="px-3 py-1.5 rounded-xl bg-emerald-600 !text-white [&_*]:!text-white text-xs font-medium hover:bg-emerald-700 transition-colors shadow-xs"
-                            >
-                              Mark Received
-                            </button>
-                          )}
-
-                          {order.status === 'PENDING' && (
-                            <button
-                              onClick={() => cancelOrder(order.id)}
-                              className="px-3 py-1.5 rounded-xl bg-rose-50 border border-rose-300 text-rose-700 hover:bg-rose-100 text-xs font-medium transition-colors"
-                            >
-                              Cancel
-                            </button>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Embedded Shipment Tracking Stepper */}
-                      {order.status !== 'CANCELLED' && (
-                        <div className="py-2.5 px-3 bg-[#424a70]/3 rounded-2xl border border-[#424a70]/8 my-2">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-3">
-                            <span className="text-[10px] uppercase tracking-wider text-[#424a70] font-semibold">
-                              Consignment Tracking · {order.carrier || 'BlueDart Atelier Courier'}
-                            </span>
-                            {order.trackingNumber && (
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-[10px] font-mono font-bold text-[#1c2033]">
-                                  Waybill: {order.trackingNumber}
-                                </span>
-                                <button
-                                  onClick={() => handleCopyWaybill(order.trackingNumber || '')}
-                                  title="Copy Waybill"
-                                  className="p-1 rounded hover:bg-[#424a70]/10 text-[#424a70]"
-                                >
-                                  <Copy className="w-3 h-3" />
-                                </button>
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 relative">
-                            {steps.map((step, idx) => {
-                              const isComplete = idx <= currentStepIdx
-                              const isCurrent = idx === currentStepIdx
-                              return (
-                                <div
-                                  key={step.key}
-                                  className="flex items-center sm:flex-col sm:text-center gap-2 sm:gap-1 p-2 sm:p-0 rounded-xl bg-white sm:bg-transparent border border-[#424a70]/10 sm:border-0"
-                                >
-                                  <div
-                                    className={`w-7 h-7 rounded-full flex items-center justify-center text-xs shrink-0 transition-colors ${
-                                      isComplete
-                                        ? 'bg-[#424a70] !text-white [&_*]:!text-white shadow-xs font-bold'
-                                        : 'bg-[#424a70]/10 text-[#424a70]/60'
-                                    }`}
-                                  >
-                                    {isComplete ? <CheckCircle2 className="w-3.5 h-3.5" /> : idx + 1}
-                                  </div>
-                                  <span
-                                    className={`text-[11px] font-medium leading-tight ${
-                                      isCurrent
-                                        ? 'text-[#424a70] font-bold'
-                                        : isComplete
-                                        ? 'text-[#1c2033]'
-                                        : 'text-[#424a70]/60'
-                                    }`}
-                                  >
-                                    {step.label}
-                                  </span>
-                                </div>
-                              )
-                            })}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Expanded Tracking Details View */}
-                      {isExpandedTracking && (
-                        <div className="p-4 rounded-2xl bg-blue-50/60 border border-blue-200 space-y-3">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] uppercase tracking-wider font-semibold text-[#424a70]">
-                              Live Consignment Coordinates
-                            </span>
-                            <span className="text-[10px] font-mono font-medium text-[#424a70]">
-                              Destination: {order.shippingAddress.city}, {order.shippingAddress.state}
-                            </span>
-                          </div>
-                          <p className="text-xs text-[#424a70]/80">
-                            Consignment dispatched from UNIFORT Coastal Atelier, Chennai. Signature proof of delivery required upon arrival.
-                          </p>
-                          {order.status === 'DELIVERED' && (
-                            <div className="pt-1 flex items-center gap-2">
-                              <Link
-                                href="/collection"
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#424a70] !text-white [&_*]:!text-white text-xs font-medium hover:bg-[#4f5987]"
-                              >
-                                <Star className="w-3 h-3" />
-                                <span>Write a Review for this Piece</span>
-                              </Link>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Items Preview */}
-                      <div className="space-y-2 pt-2 border-t border-[#424a70]/5">
-                        <span className="text-[10px] uppercase tracking-wider text-[#424a70]/60 font-semibold block">
-                          Included Tableware ({order.items.length} pieces)
-                        </span>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {order.items.map((item) => (
-                            <div
-                              key={item.id}
-                              className="p-2.5 rounded-2xl bg-[#faf9fc] border border-[#424a70]/10 flex items-center gap-3"
-                            >
-                              <div className="w-10 h-10 rounded-xl bg-white relative overflow-hidden shrink-0 border border-[#424a70]/10">
-                                <Image
-                                  src={item.productImage || '/products/unifort-plate-light.jpg'}
-                                  alt={item.productName}
-                                  fill
-                                  sizes="40px"
-                                  className="object-cover"
-                                />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <h4 className="text-xs font-semibold text-[#1c2033] truncate">
-                                  {item.productName}
-                                </h4>
-                                <span className="text-[10px] text-[#424a70]/70 block font-mono">
-                                  Qty: {item.quantity} · ₹{item.price} each
-                                </span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ================= PAGE 2: 3D BESPOKE STUDIO PIECES ================= */}
-        {currentView === 'designs' && (
-          <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <h2 className="text-xl font-serif font-medium text-[#1c2033]">
-                  Your Saved 3D Tableware Formulations
-                </h2>
-                <p className="text-xs text-[#424a70]/70">
-                  Custom reduction-fired stoneware, studio mineral glazes, and bespoke finishes.
-                </p>
-              </div>
-              <Link
-                href="/customize"
-                className="px-4 py-2 bg-[#424a70] !text-white [&_*]:!text-white text-xs font-medium rounded-xl shadow-xs hover:bg-[#4f5987] transition-all flex items-center gap-1.5 self-start sm:self-auto"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>New 3D Formulation</span>
-              </Link>
-            </div>
-
-            {savedDesigns.length === 0 ? (
-              <div className="p-12 bg-white border border-[#424a70]/15 rounded-3xl text-center space-y-3">
-                <Sparkles className="w-10 h-10 text-[#424a70]/40 mx-auto" />
-                <h3 className="text-base font-serif font-medium text-[#1c2033]">
-                  No Bespoke Formulations in Queue
-                </h3>
-                <p className="text-xs text-[#424a70]/70 max-w-sm mx-auto leading-relaxed">
-                  Open the UNIFORT 3D Studio to apply mineral glazes, ceramic stamps, and gold decals to our core architectural silhouettes.
-                </p>
-                <div className="pt-2">
-                  <Link
-                    href="/customize"
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#424a70] !text-white [&_*]:!text-white text-xs font-medium hover:bg-[#4f5987] transition-all shadow-xs"
-                  >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>Launch 3D Studio</span>
-                  </Link>
-                </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {savedDesigns.map((design) => {
-                  const statusColors: Record<string, string> = {
-                    DRAFT: 'bg-slate-100 text-slate-800 border border-slate-300 font-semibold',
-                    SUBMITTED: 'bg-blue-100 text-blue-900 border border-blue-300 font-semibold',
-                    IN_PRODUCTION: 'bg-purple-100 text-purple-900 border border-purple-300 font-semibold',
-                    COMPLETED: 'bg-emerald-100 text-emerald-900 border border-emerald-300 font-semibold',
-                  }
-
-                  return (
-                    <div
-                      key={design.id}
-                      className="bg-white border border-[#424a70]/15 rounded-3xl p-5 shadow-xs space-y-4 hover:border-[#424a70]/30 transition-all"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-mono ${
-                              statusColors[design.status] || 'bg-slate-100 text-slate-800'
-                            }`}
-                          >
-                            {design.status.replace(/_/g, ' ')}
-                          </span>
-                          <h3 className="text-base font-serif font-medium text-[#1c2033] mt-1.5">
-                            {design.title}
-                          </h3>
-                          <span className="text-[11px] text-[#424a70]/60 block font-mono">
-                            Silhouette: {(design.modelType || 'STONEWARE').toUpperCase()} · Finish: {design.finish || 'Mineral Satin'}
-                          </span>
-                        </div>
-
-                        {/* Glaze Swatches */}
-                        <div className="flex items-center gap-1">
-                          <div
-                            className="w-5 h-5 rounded-full border border-black/10 shadow-xs"
-                            style={{ backgroundColor: design.primaryGlazeColor }}
-                            title={`Primary Glaze: ${design.primaryGlazeColor}`}
-                          />
-                          {design.accentGlazeColor && (
-                            <div
-                              className="w-5 h-5 rounded-full border border-black/10 shadow-xs"
-                              style={{ backgroundColor: design.accentGlazeColor }}
-                              title={`Accent Glaze: ${design.accentGlazeColor}`}
-                            />
-                          )}
-                        </div>
-                      </div>
-
-                      {design.craftsmanNotes && (
-                        <div className="p-3 bg-[#faf9fc] rounded-xl border border-[#424a70]/10 text-xs text-[#424a70]/80">
-                          <span className="text-[10px] uppercase tracking-wider text-[#424a70] font-semibold block mb-0.5">
-                            Ceramist Studio Notes:
-                          </span>
-                          <p className="italic">{design.craftsmanNotes}</p>
-                        </div>
-                      )}
-
-                      <div className="flex flex-wrap items-center justify-between gap-2.5 pt-3 border-t border-[#424a70]/10">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <button
-                            onClick={() => {
-                              setRenamingDesign(design)
-                              setNewTitle(design.title)
-                            }}
-                            className="px-2.5 py-1 rounded-lg bg-white border border-[#424a70]/20 text-[11px] font-medium text-[#424a70] hover:bg-[#424a70]/5 transition-colors"
-                          >
-                            Rename
-                          </button>
-                          <button
-                            onClick={() => duplicateBespokeDesign(design.id)}
-                            title="Duplicate Formulation"
-                            className="p-1 rounded-lg bg-white border border-[#424a70]/20 text-[#424a70] hover:bg-[#424a70]/5 transition-colors"
-                          >
-                            <Copy className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => deleteBespokeDesign(design.id)}
-                            title="Remove Formulation"
-                            className="px-2.5 py-1 rounded-lg bg-rose-50 border border-rose-300 text-rose-700 text-[11px] font-medium hover:bg-rose-100 transition-colors"
-                          >
-                            Delete
-                          </button>
-                        </div>
-
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <Link
-                            href={`/customize?piece=${encodeURIComponent(design.productName)}`}
-                            className="px-3 py-1.5 rounded-xl bg-white border border-[#424a70]/20 text-xs font-medium text-[#424a70] hover:bg-[#424a70]/5 transition-colors"
-                          >
-                            Edit in 3D
-                          </Link>
-                          <button
-                            onClick={() => handleOrderCustomPiece(design)}
-                            className="px-3 py-1.5 rounded-xl bg-[#424a70] !text-white [&_*]:!text-white text-xs font-medium hover:bg-[#4f5987] transition-all shadow-xs"
-                          >
-                            Order Piece (₹148)
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ================= PAGE 3: HOSPITALITY INQUIRIES ================= */}
-        {currentView === 'inquiries' && (
-          <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <h2 className="text-xl font-serif font-medium text-[#1c2033]">
-                  Hospitality & Trade Inquiries
-                </h2>
-                <p className="text-xs text-[#424a70]/70">
-                  Track bespoke dinnerware quotes, restaurant commissions, and studio proposals.
-                </p>
-              </div>
-
-              <Link
-                href="/contact"
-                className="px-4 py-2 bg-[#424a70] !text-white [&_*]:!text-white text-xs font-medium rounded-xl shadow-xs hover:bg-[#4f5987] transition-all flex items-center gap-1.5 self-start sm:self-auto"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>New Commission Inquiry</span>
-              </Link>
-            </div>
-
-            {inquiries.length === 0 ? (
-              <div className="p-12 bg-white border border-[#424a70]/15 rounded-3xl text-center space-y-3">
-                <Mail className="w-10 h-10 text-[#424a70]/40 mx-auto" />
-                <h3 className="text-base font-serif font-medium text-[#1c2033]">
-                  No Inquiries on File
-                </h3>
-                <p className="text-xs text-[#424a70]/70 max-w-sm mx-auto leading-relaxed">
-                  Planning a restaurant opening or private estate banquet suite? Our ceramists prepare custom proposals and mineral glaze samples.
-                </p>
-                <div className="pt-2">
-                  <Link
-                    href="/contact"
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#424a70] !text-white [&_*]:!text-white text-xs font-medium hover:bg-[#4f5987] transition-all shadow-xs"
-                  >
-                    <Mail className="w-3.5 h-3.5" />
-                    <span>Send Studio Inquiry</span>
-                  </Link>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {inquiries.map((inq) => {
-                  const statusColors: Record<string, string> = {
-                    NEW: 'bg-amber-100 text-amber-900 border border-amber-300 font-semibold',
-                    IN_PROGRESS: 'bg-blue-100 text-blue-900 border border-blue-300 font-semibold',
-                    RESOLVED: 'bg-emerald-100 text-emerald-900 border border-emerald-300 font-semibold',
-                    CLOSED: 'bg-slate-100 text-slate-800 border border-slate-300 font-semibold',
-                  }
-
-                  return (
-                    <div
-                      key={inq.id}
-                      className="bg-white border border-[#424a70]/15 rounded-3xl p-5 shadow-xs space-y-3"
-                    >
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] uppercase tracking-wider font-mono font-semibold px-2 py-0.5 rounded-full bg-[#424a70]/10 text-[#424a70]">
-                            {inq.type.replace(/_/g, ' ')}
-                          </span>
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-mono ${
-                              statusColors[inq.status] || 'bg-slate-100 text-slate-800'
-                            }`}
-                          >
-                            Status: {inq.status}
-                          </span>
-                        </div>
-                        <span className="text-[11px] text-[#424a70]/60 font-mono">
-                          {new Date(inq.createdAt).toLocaleDateString('en-US', {
-                            month: 'short',
-                            day: 'numeric',
-                            year: 'numeric',
-                          })}
-                        </span>
-                      </div>
-
-                      <h3 className="text-sm font-semibold text-[#1c2033]">{inq.subject}</h3>
-                      <p className="text-xs text-[#424a70]/80 leading-relaxed bg-[#faf9fc] p-3 rounded-xl border border-[#424a70]/5">
-                        {inq.message}
-                      </p>
-
-                      {inq.notes && (
-                        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900">
-                          <span className="text-[10px] uppercase tracking-wider font-semibold block mb-0.5 text-emerald-800">
-                            Atelier Response:
-                          </span>
-                          <p>{inq.notes}</p>
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ================= PAGE 4: REGISTRY & SECURITY ================= */}
-        {currentView === 'profile' && (
-          <div className="space-y-6">
-            {!isLoggedIn ? (
-              <div className="p-12 bg-white border border-[#424a70]/15 rounded-3xl text-center space-y-4">
-                <Shield className="w-12 h-12 text-[#424a70] mx-auto" />
-                <h3 className="text-xl font-serif font-medium text-[#1c2033]">
-                  Patron Identification Required
-                </h3>
-                <p className="text-xs text-[#424a70]/70 max-w-md mx-auto leading-relaxed">
-                  Please sign in or register your atelier account to inspect and manage your coordinates, default delivery destinations, and access passphrase keys.
-                </p>
-                <button
-                  onClick={() => setAuthModalOpen('login')}
-                  className="px-6 py-2.5 rounded-2xl bg-[#424a70] !text-white [&_*]:!text-white text-xs font-medium hover:bg-[#4f5987] transition-all shadow-xs"
-                >
-                  Sign In to Patron Registry
-                </button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Personal Coordinates */}
-                <div className="bg-white border border-[#424a70]/15 rounded-3xl p-6 shadow-xs space-y-4">
-                  <div>
-                    <h3 className="text-base font-serif font-medium text-[#1c2033]">
-                      Patron Identity & Coordinates
-                    </h3>
-                    <p className="text-xs text-[#424a70]/70">
-                      Manage your personal details for consignment manifests and provenance certificates.
-                    </p>
-                  </div>
-
-                  {profileSuccess && (
-                    <div className="p-3 bg-emerald-100 border border-emerald-300 text-emerald-900 text-xs rounded-xl font-medium">
-                      {profileSuccess}
-                    </div>
-                  )}
-
-                  <form onSubmit={handleUpdateProfile} className="space-y-3">
-                    <div>
-                      <label className="block text-[10px] uppercase tracking-wider text-[#424a70]/80 font-medium mb-1">
-                        Patron Full Name
-                      </label>
-                      <input
-                        type="text"
-                        value={profileName}
-                        onChange={(e) => setProfileName(e.target.value)}
-                        className="w-full px-3.5 py-2.5 bg-[#faf9fc] border border-[#424a70]/20 rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] uppercase tracking-wider text-[#424a70]/80 font-medium mb-1">
-                        Account Email (Immutable)
-                      </label>
-                      <input
-                        type="email"
-                        disabled
-                        value={customer?.email || ''}
-                        className="w-full px-3.5 py-2.5 bg-black/5 border border-[#424a70]/10 rounded-xl text-xs text-[#424a70]/60 cursor-not-allowed"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] uppercase tracking-wider text-[#424a70]/80 font-medium mb-1">
-                        Mobile Phone Coordinates
-                      </label>
-                      <input
-                        type="tel"
-                        value={profilePhone}
-                        onChange={(e) => setProfilePhone(e.target.value)}
-                        placeholder="+91 98401 23456"
-                        className="w-full px-3.5 py-2.5 bg-[#faf9fc] border border-[#424a70]/20 rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
-                      />
-                    </div>
-
-                    <button
-                      type="submit"
-                      className="w-full py-2.5 rounded-xl bg-[#424a70] !text-white [&_*]:!text-white text-xs font-medium hover:bg-[#4f5987] transition-all shadow-xs"
-                    >
-                      Save Profile Details
-                    </button>
-                  </form>
-                </div>
-
-                {/* Passphrase / Security */}
-                <div className="bg-white border border-[#424a70]/15 rounded-3xl p-6 shadow-xs space-y-4">
-                  <div>
-                    <h3 className="text-base font-serif font-medium text-[#1c2033]">
-                      Atelier Passphrase Security
-                    </h3>
-                    <p className="text-xs text-[#424a70]/70">
-                      Update your authentication key for secure patron account access.
-                    </p>
-                  </div>
-
-                  {passSuccess && (
-                    <div className="p-3 bg-emerald-100 border border-emerald-300 text-emerald-900 text-xs rounded-xl font-medium">
-                      {passSuccess}
-                    </div>
-                  )}
-                  {passError && (
-                    <div className="p-3 bg-rose-100 border border-rose-300 text-rose-900 text-xs rounded-xl font-medium">
-                      {passError}
-                    </div>
-                  )}
-
-                  <form onSubmit={handleChangePassword} className="space-y-3">
-                    <div>
-                      <label className="block text-[10px] uppercase tracking-wider text-[#424a70]/80 font-medium mb-1">
-                        Current Passphrase
-                      </label>
-                      <input
-                        type="password"
-                        required
-                        value={currentPass}
-                        onChange={(e) => setCurrentPass(e.target.value)}
-                        placeholder="••••••••••••"
-                        className="w-full px-3.5 py-2.5 bg-[#faf9fc] border border-[#424a70]/20 rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] uppercase tracking-wider text-[#424a70]/80 font-medium mb-1">
-                        New Passphrase
-                      </label>
-                      <input
-                        type="password"
-                        required
-                        value={newPass}
-                        onChange={(e) => setNewPass(e.target.value)}
-                        placeholder="At least 6 characters"
-                        className="w-full px-3.5 py-2.5 bg-[#faf9fc] border border-[#424a70]/20 rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
-                      />
-                    </div>
-
-                    <button
-                      type="submit"
-                      className="w-full py-2.5 rounded-xl bg-[#424a70] !text-white [&_*]:!text-white text-xs font-medium hover:bg-[#4f5987] transition-all shadow-xs"
-                    >
-                      Update Passphrase
-                    </button>
-                  </form>
-                </div>
-              </div>
-            )}
-          </div>
+            }
+          />
         )}
       </div>
 
-      {/* ================= ORDER DETAILS RECEIPT MODAL ================= */}
-      {selectedOrder && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-md"
-          onClick={() => setSelectedOrder(null)}
-        >
-          <div
-            className="w-full max-w-lg bg-white border border-[#424a70]/15 rounded-3xl p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
+      <div className="grid gap-3 sm:grid-cols-2 [&>*]:min-w-0">
+        <Link href="/customize" className={`${card} flex items-center justify-between gap-3 p-4 hover:border-[#424a70]/40`}>
+          <span>
+            <span className="block font-medium">Design your own piece</span>
+            <span className="text-sm text-[#687194]">Open the 3D studio</span>
+          </span>
+          <ArrowRight className="h-5 w-5 shrink-0 text-[#424a70]" aria-hidden />
+        </Link>
+        <Link href="/contact" className={`${card} flex items-center justify-between gap-3 p-4 hover:border-[#424a70]/40`}>
+          <span>
+            <span className="block font-medium">Need help with an order?</span>
+            <span className="text-sm text-[#687194]">Write to our studio team</span>
+          </span>
+          <ArrowRight className="h-5 w-5 shrink-0 text-[#424a70]" aria-hidden />
+        </Link>
+      </div>
+    </div>
+  )
+}
+
+/* ------------------------------ Orders ------------------------------ */
+
+type OrderFilter = 'all' | 'active' | 'delivered' | 'cancelled'
+
+function Orders() {
+  const { orders, ordersLoading, refreshOrders } = useCustomer()
+  const params = useSearchParams()
+  const focus = params.get('order')
+  const [filter, setFilter] = useState<OrderFilter>('all')
+  const [q, setQ] = useState('')
+
+  useEffect(() => {
+    refreshOrders()
+  }, [refreshOrders])
+
+  const shown = useMemo(() => {
+    const query = q.trim().toLowerCase()
+    return orders.filter((o) => {
+      const f =
+        filter === 'all' ||
+        (filter === 'active' && !['DELIVERED', 'CANCELLED', 'REFUNDED'].includes(o.status)) ||
+        (filter === 'delivered' && o.status === 'DELIVERED') ||
+        (filter === 'cancelled' && ['CANCELLED', 'REFUNDED'].includes(o.status))
+      const m = !query || o.orderNumber.toLowerCase().includes(query) || o.items.some((i) => i.productName.toLowerCase().includes(query))
+      return f && m
+    })
+  }, [orders, filter, q])
+
+  const filters: [OrderFilter, string][] = [
+    ['all', 'All'],
+    ['active', 'In progress'],
+    ['delivered', 'Delivered'],
+    ['cancelled', 'Cancelled'],
+  ]
+
+  return (
+    <div>
+      <SectionTitle title="My orders" subtitle="Track deliveries, pay pending orders, cancel or review your pieces." />
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1" role="group" aria-label="Filter orders">
+          {filters.map(([id, label]) => (
             <button
-              onClick={() => setSelectedOrder(null)}
-              className="absolute top-5 right-5 p-2 rounded-full hover:bg-neutral-100 text-neutral-500 hover:text-neutral-800 transition-colors"
-              aria-label="Close Manifest"
+              key={id}
+              type="button"
+              aria-pressed={filter === id}
+              onClick={() => setFilter(id)}
+              className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-medium ${filter === id ? 'bg-[#424a70] text-white' : 'bg-white text-[#1c2033] ring-1 ring-[#424a70]/15 hover:bg-[#424a70]/5'}`}
             >
-              <X className="w-4 h-4" />
+              {label}
             </button>
+          ))}
+        </div>
+        <div className="relative sm:w-64">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#687194]" aria-hidden />
+          <label htmlFor="order-search" className="sr-only">
+            Search orders
+          </label>
+          <input id="order-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Order number or product" className={`${inputCls} pl-9`} />
+        </div>
+      </div>
 
-            <span className="text-[10px] uppercase tracking-[0.2em] text-[#424a70] font-semibold block mb-1">
-              Atelier Consignment Manifest
-            </span>
-            <h2 className="text-xl font-serif font-medium text-[#1c2033] mb-1">
-              Order {selectedOrder.orderNumber}
-            </h2>
-            <p className="text-xs text-[#424a70]/70 mb-4 font-mono">
-              Status: {selectedOrder.status} · Payment: {selectedOrder.paymentStatus}
+      {ordersLoading && orders.length === 0 ? (
+        <Loading />
+      ) : shown.length === 0 ? (
+        <Empty
+          icon={Package}
+          title={orders.length ? 'No orders match' : 'No orders yet'}
+          text={orders.length ? 'Try a different filter or search.' : 'Your orders will appear here once you place one.'}
+          action={
+            !orders.length && (
+              <Link href="/collection" className={btnPrimary}>
+                Browse the collection
+              </Link>
+            )
+          }
+        />
+      ) : (
+        <ul className="space-y-4">
+          {shown.map((o) => (
+            <li key={o.id}>
+              <OrderCard order={o} defaultOpen={focus === o.orderNumber || focus === o.id} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+function OrderCard({ order, defaultOpen }: { order: CustomerOrder; defaultOpen: boolean }) {
+  const { cancelOrder, markOrderReceived } = useCustomer()
+  const [open, setOpen] = useState(defaultOpen)
+  const [busy, setBusy] = useState(false)
+  const preview = order.items.slice(0, 4)
+
+  const act = async (fn: () => Promise<{ success: boolean; message?: string }>) => {
+    setBusy(true)
+    const r = await fn()
+    setBusy(false)
+    if (r.success) toast.success(r.message || 'Done')
+    else toast.error(r.message || 'Something went wrong')
+  }
+
+  return (
+    <article className={`${card} overflow-hidden`} aria-labelledby={`order-${order.id}`}>
+      <div className="flex flex-col gap-4 p-4 sm:p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <h3 id={`order-${order.id}`} className="flex flex-wrap items-center gap-2 text-base font-semibold">
+              <span className="break-all">Order {order.orderNumber}</span>
+              <StatusBadge status={order.status} />
+            </h3>
+            <p className="mt-1 text-sm text-[#687194]">
+              Placed {fmtDate(order.createdAt)} · {order.items.reduce((s, i) => s + i.quantity, 0)} item(s) ·{' '}
+              <span className="font-medium text-[#1c2033]">{formatINR(order.totalAmount)}</span>
             </p>
+          </div>
+          <div className="flex -space-x-2">
+            {preview.map((it) => (
+              <span key={it.id} className="relative h-12 w-12 overflow-hidden rounded-xl border-2 border-white bg-slate-100">
+                <Image src={it.productImage} alt="" fill sizes="48px" className="object-cover" />
+              </span>
+            ))}
+            {order.items.length > 4 && (
+              <span className="flex h-12 w-12 items-center justify-center rounded-xl border-2 border-white bg-slate-100 text-xs font-medium">+{order.items.length - 4}</span>
+            )}
+          </div>
+        </div>
 
-            <div className="space-y-4 text-xs">
-              {/* Shipping Destination */}
-              <div className="p-3.5 bg-[#faf9fc] rounded-2xl border border-[#424a70]/10">
-                <span className="text-[10px] uppercase tracking-wider text-[#424a70] font-semibold block mb-1">
-                  Delivery Destination
-                </span>
-                <p className="font-semibold text-[#1c2033]">{selectedOrder.shippingAddress?.fullName}</p>
-                <p>{selectedOrder.shippingAddress?.addressLine1}</p>
-                {selectedOrder.shippingAddress?.addressLine2 && (
-                  <p>{selectedOrder.shippingAddress?.addressLine2}</p>
+        <OrderProgress status={order.status} dates={{ PLACED: order.createdAt, CONFIRMED: order.paidAt, SHIPPED: order.shippedAt, DELIVERED: order.deliveredAt }} />
+        {order.status !== 'CANCELLED' && order.status !== 'REFUNDED' && <p className="text-sm text-[#3b4266]">{statusHelp(order.status)}</p>}
+
+        {order.trackingNumber && (
+          <div className="flex flex-wrap items-center gap-2 rounded-xl bg-[#424a70]/5 px-3 py-2.5 text-sm">
+            <Truck className="h-4 w-4 text-[#424a70]" aria-hidden />
+            <span>
+              {order.carrier || 'Courier'} tracking number: <strong className="font-mono">{order.trackingNumber}</strong>
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard?.writeText(order.trackingNumber || '')
+                toast.success('Tracking number copied')
+              }}
+              className="ml-auto inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-[#424a70] hover:bg-white"
+            >
+              <Copy className="h-3.5 w-3.5" aria-hidden /> Copy
+            </button>
+          </div>
+        )}
+
+        {/* Actions: the most relevant one first */}
+        <div className="flex flex-wrap gap-2">
+          {order.canPay && (
+            <Link href={`/orders/${encodeURIComponent(order.orderNumber)}`} className={btnPrimary}>
+              <CreditCard className="h-4 w-4" aria-hidden /> Pay {formatINR(order.totalAmount)}
+            </Link>
+          )}
+          {order.canConfirmDelivery && (
+            <button type="button" disabled={busy} onClick={() => act(() => markOrderReceived(order.id))} className={btnPrimary}>
+              I&apos;ve received it
+            </button>
+          )}
+          <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} className={btnSecondary}>
+            {open ? 'Hide details' : 'View details'}
+            <ChevronDown className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden />
+          </button>
+          {order.canCancel && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                if (window.confirm(`Cancel order ${order.orderNumber}?${order.paymentStatus === 'PAID' ? ' Your payment will be refunded.' : ''}`)) act(() => cancelOrder(order.id))
+              }}
+              className={btnDanger}
+            >
+              Cancel order
+            </button>
+          )}
+        </div>
+      </div>
+
+      {open && (
+        <div className="grid gap-5 border-t border-[#424a70]/10 bg-[#faf9fc] p-4 sm:p-5 md:grid-cols-[1fr_260px]">
+          <div className="min-w-0">
+            <h4 className="mb-2 text-sm font-semibold">Items</h4>
+            <ul className="divide-y divide-[#424a70]/10">
+              {order.items.map((it) => (
+                <li key={it.id} className="flex items-center gap-3 py-3">
+                  <span className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-slate-100">
+                    <Image src={it.productImage} alt="" fill sizes="56px" className="object-cover" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium">{it.productName}</span>
+                    <span className="text-xs text-[#687194]">
+                      Qty {it.quantity} · {formatINR(it.price)} each
+                    </span>
+                  </span>
+                  <span className="flex flex-col items-end gap-1">
+                    <span className="text-sm font-medium">{formatINR(it.totalPrice)}</span>
+                    {order.status === 'DELIVERED' && it.productSlug && !it.bespokeDesignId && (
+                      <Link href={`/collection/${it.productSlug}#reviews`} className="inline-flex items-center gap-1 text-xs font-medium text-[#424a70] hover:underline">
+                        <Star className="h-3.5 w-3.5" aria-hidden /> Write a review
+                      </Link>
+                    )}
+                    {it.bespokeDesignId && (
+                      <Link href={`/customize?design=${it.bespokeDesignId}`} className="text-xs font-medium text-[#424a70] hover:underline">
+                        View design
+                      </Link>
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="space-y-4 text-sm">
+            <div>
+              <h4 className="mb-1 font-semibold">Delivery address</h4>
+              <p className="text-[#3b4266]">
+                {order.shippingAddress.fullName}
+                <br />
+                {order.shippingAddress.addressLine1}
+                {order.shippingAddress.addressLine2 ? `, ${order.shippingAddress.addressLine2}` : ''}
+                <br />
+                {order.shippingAddress.city}, {order.shippingAddress.state} {order.shippingAddress.postalCode}
+              </p>
+            </div>
+            <div>
+              <h4 className="mb-1 font-semibold">Payment</h4>
+              <dl className="space-y-1 text-[#3b4266]">
+                <div className="flex justify-between">
+                  <dt>Subtotal</dt>
+                  <dd>{formatINR(order.subtotal)}</dd>
+                </div>
+                {order.discount > 0 && (
+                  <div className="flex justify-between text-emerald-700">
+                    <dt>Discount</dt>
+                    <dd>−{formatINR(order.discount)}</dd>
+                  </div>
                 )}
-                <p>
-                  {selectedOrder.shippingAddress?.city}, {selectedOrder.shippingAddress?.state} -{' '}
-                  {selectedOrder.shippingAddress?.postalCode}
-                </p>
-                <p>{selectedOrder.shippingAddress?.country || 'India'}</p>
-              </div>
+                <div className="flex justify-between">
+                  <dt>Shipping</dt>
+                  <dd>{order.shippingFee ? formatINR(order.shippingFee) : 'Free'}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt>GST</dt>
+                  <dd>{formatINR(order.tax)}</dd>
+                </div>
+                <div className="flex justify-between border-t border-[#424a70]/10 pt-1 font-semibold text-[#1c2033]">
+                  <dt>Total</dt>
+                  <dd>{formatINR(order.totalAmount)}</dd>
+                </div>
+              </dl>
+              <p className="mt-2 text-xs text-[#687194]">
+                {order.paymentMethod === 'COD' ? 'Cash on delivery' : 'Online payment'} ·{' '}
+                {order.paymentStatus === 'PAID' ? 'paid' : order.paymentStatus === 'REFUNDED' ? 'refunded' : 'not paid yet'}
+                {order.refundedAmount > 0 && order.paymentStatus !== 'REFUNDED' ? ` · ${formatINR(order.refundedAmount)} refunded` : ''}
+              </p>
+            </div>
+            <Link
+              href={`/contact?type=GENERAL&order=${encodeURIComponent(`Question about order ${order.orderNumber}: `)}`}
+              className="inline-flex items-center gap-1 text-sm font-medium text-[#424a70] hover:underline"
+            >
+              Get help with this order <ArrowRight className="h-4 w-4" aria-hidden />
+            </Link>
+          </div>
+        </div>
+      )}
+    </article>
+  )
+}
 
-              {/* Items List */}
-              <div>
-                <span className="text-[10px] uppercase tracking-wider text-[#424a70] font-semibold block mb-2">
-                  Purchased Tableware ({selectedOrder.items?.length || 0})
-                </span>
-                <div className="divide-y divide-[#424a70]/10 border border-[#424a70]/10 rounded-2xl overflow-hidden">
-                  {selectedOrder.items?.map((it) => (
-                    <div key={it.id} className="p-3 flex items-center justify-between bg-white">
-                      <div>
-                        <span className="font-semibold text-[#1c2033] block">{it.productName}</span>
-                        <span className="text-[10px] text-[#424a70]/60">Qty: {it.quantity}</span>
-                      </div>
-                      <span className="font-mono font-bold text-[#424a70]">
-                        ₹{(it.price * it.quantity).toLocaleString()}
-                      </span>
-                    </div>
-                  ))}
+/* ------------------------------ Designs ------------------------------ */
+
+const DESIGN_STATUS: Record<string, string> = {
+  DRAFT: 'Draft',
+  SAVED: 'Saved',
+  SUBMITTED: 'Ordered',
+  IN_REVIEW: 'In review',
+  APPROVED: 'Approved',
+  IN_PRODUCTION: 'In production',
+  COMPLETED: 'Completed',
+  REJECTED: 'Needs changes',
+}
+
+function Designs() {
+  const { savedDesigns, designsLoading, refreshSavedDesigns, deleteBespokeDesign, renameBespokeDesign, duplicateBespokeDesign } = useCustomer()
+  const [renaming, setRenaming] = useState<CustomerSavedDesign | null>(null)
+  const [title, setTitle] = useState('')
+
+  useEffect(() => {
+    refreshSavedDesigns()
+  }, [refreshSavedDesigns])
+
+  const res = (r: { success: boolean; message?: string }, ok: string) => (r.success ? toast.success(ok) : toast.error(r.message || 'Something went wrong'))
+
+  return (
+    <div>
+      <SectionTitle
+        title="My designs"
+        subtitle="Pieces you created in the 3D studio. Open one to edit it or add it to your bag."
+        action={
+          <Link href="/customize" className={btnPrimary}>
+            <Plus className="h-4 w-4" aria-hidden /> New design
+          </Link>
+        }
+      />
+      {designsLoading && savedDesigns.length === 0 ? (
+        <Loading />
+      ) : savedDesigns.length === 0 ? (
+        <Empty
+          icon={Sparkles}
+          title="No saved designs"
+          text="Customise a mug, plate or tumbler in the 3D studio and press Save to keep it here."
+          action={
+            <Link href="/customize" className={btnPrimary}>
+              Open the 3D studio
+            </Link>
+          }
+        />
+      ) : (
+        <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {savedDesigns.map((d) => (
+            <li key={d.id} className={`${card} flex flex-col overflow-hidden`}>
+              <div className="relative aspect-[4/3] bg-slate-100">
+                {d.previewUrl && <Image src={d.previewUrl} alt="" fill sizes="(max-width: 640px) 100vw, 33vw" className="object-cover" />}
+                <span className="absolute left-3 top-3 rounded-full bg-white/95 px-2.5 py-1 text-xs font-semibold text-[#1c2033] shadow-sm">{DESIGN_STATUS[d.status] || d.status}</span>
+              </div>
+              <div className="flex flex-1 flex-col gap-3 p-4">
+                <div className="min-w-0">
+                  <h3 className="truncate font-semibold">{d.title}</h3>
+                  <p className="text-sm text-[#687194]">
+                    {d.productName} · from {formatINR(d.estimatedPrice)}
+                  </p>
+                  {d.status === 'REJECTED' && <p className="mt-1 text-xs text-rose-700">Our studio asked for changes — open the design to update it.</p>}
+                </div>
+                <div className="mt-auto flex flex-wrap gap-2">
+                  <Link href={`/customize?design=${d.id}`} className={`${btnPrimary} flex-1`}>
+                    {d.editable ? 'Open & edit' : 'Open a copy'}
+                  </Link>
+                  <button
+                    type="button"
+                    aria-label={`Rename ${d.title}`}
+                    title="Rename"
+                    onClick={() => {
+                      setRenaming(d)
+                      setTitle(d.title)
+                    }}
+                    className={btnSecondary}
+                  >
+                    <Pencil className="h-4 w-4" aria-hidden />
+                  </button>
+                  <button type="button" aria-label={`Duplicate ${d.title}`} title="Duplicate" onClick={async () => res(await duplicateBespokeDesign(d.id), 'Design duplicated')} className={btnSecondary}>
+                    <Copy className="h-4 w-4" aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Delete ${d.title}`}
+                    title="Delete"
+                    onClick={async () => {
+                      if (window.confirm(`Delete "${d.title}"?`)) res(await deleteBespokeDesign(d.id), 'Design deleted')
+                    }}
+                    className={btnDanger}
+                  >
+                    <Trash2 className="h-4 w-4" aria-hidden />
+                  </button>
                 </div>
               </div>
-
-              {/* Grand Total */}
-              <div className="pt-3 border-t border-[#424a70]/10 flex items-center justify-between text-sm">
-                <span className="font-semibold text-[#1c2033]">Total Invoiced</span>
-                <span className="font-serif font-bold text-lg text-[#424a70]">
-                  ₹{selectedOrder.totalAmount?.toLocaleString()}
-                </span>
-              </div>
-
-              <div className="pt-3 flex flex-col sm:flex-row items-center gap-2">
-                <button
-                  onClick={() => {
-                    const ordNum = selectedOrder.orderNumber
-                    setSelectedOrder(null)
-                    navigateToView('orders')
-                    setTrackingInput(ordNum)
-                    handlePerformTrack(ordNum)
-                  }}
-                  className="w-full py-2.5 rounded-xl bg-[#424a70] !text-white [&_*]:!text-white text-xs font-medium hover:bg-[#4f5987] transition-all shadow-xs flex items-center justify-center gap-1.5"
-                >
-                  <Truck className="w-3.5 h-3.5" />
-                  <span>Track Live Consignment</span>
-                </button>
-                <button
-                  onClick={() => setSelectedOrder(null)}
-                  className="w-full py-2.5 rounded-xl bg-white border border-[#424a70]/20 text-xs font-medium text-[#424a70] hover:bg-[#424a70]/5 transition-colors"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+            </li>
+          ))}
+        </ul>
       )}
 
-      {/* ================= RENAME DESIGN MODAL ================= */}
-      {renamingDesign && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-md"
-          onClick={() => setRenamingDesign(null)}
-        >
-          <div
-            className="w-full max-w-sm bg-white border border-[#424a70]/15 rounded-3xl p-6 shadow-2xl space-y-4"
-            onClick={(e) => e.stopPropagation()}
+      {renaming && (
+        <Dialog title="Rename design" onClose={() => setRenaming(null)}>
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault()
+              if (!title.trim()) return
+              const r = await renameBespokeDesign(renaming.id, title.trim())
+              res(r, 'Design renamed')
+              if (r.success) setRenaming(null)
+            }}
+            className="space-y-4"
           >
-            <h3 className="text-base font-serif font-medium text-[#1c2033]">
-              Rename Bespoke Formulation
-            </h3>
-            <input
-              type="text"
-              value={newTitle}
-              onChange={(e) => setNewTitle(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-[#faf9fc] border border-[#424a70]/20 rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
-              autoFocus
-            />
-            <div className="flex items-center justify-end gap-2 pt-2">
-              <button
-                onClick={() => setRenamingDesign(null)}
-                className="px-3.5 py-1.5 rounded-xl text-xs font-medium text-[#424a70] hover:bg-[#424a70]/5 transition-colors"
-              >
+            <div>
+              <label htmlFor="rename-title" className={labelCls}>
+                Design name
+              </label>
+              <input id="rename-title" autoFocus value={title} maxLength={120} onChange={(e) => setTitle(e.target.value)} className={inputCls} />
+            </div>
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setRenaming(null)} className={btnSecondary}>
                 Cancel
               </button>
-              <button
-                onClick={handleSaveRename}
-                className="px-4 py-1.5 rounded-xl bg-[#424a70] !text-white [&_*]:!text-white text-xs font-medium hover:bg-[#4f5987] transition-all shadow-xs"
-              >
-                Save Title
+              <button type="submit" className={btnPrimary}>
+                Save
               </button>
             </div>
-          </div>
-        </div>
+          </form>
+        </Dialog>
       )}
-    </main>
+    </div>
+  )
+}
+
+/* ------------------------------ Messages ------------------------------ */
+
+const INQ_STATUS: Record<string, { label: string; tone: string }> = {
+  NEW: { label: 'Received', tone: 'bg-sky-100 text-sky-900' },
+  IN_PROGRESS: { label: 'We are on it', tone: 'bg-indigo-100 text-indigo-900' },
+  RESOLVED: { label: 'Resolved', tone: 'bg-emerald-100 text-emerald-900' },
+  ARCHIVED: { label: 'Closed', tone: 'bg-slate-200 text-slate-900' },
+}
+
+function Messages() {
+  const { inquiries, refreshInquiries } = useCustomer()
+  useEffect(() => {
+    refreshInquiries()
+  }, [refreshInquiries])
+  return (
+    <div>
+      <SectionTitle
+        title="Messages"
+        subtitle="Questions and commission requests you sent us. Replies arrive by email."
+        action={
+          <Link href="/contact" className={btnPrimary}>
+            <Mail className="h-4 w-4" aria-hidden /> New message
+          </Link>
+        }
+      />
+      {inquiries.length === 0 ? (
+        <Empty icon={MessageSquare} title="No messages yet" text="Have a question or a custom project in mind? We'd love to hear from you." />
+      ) : (
+        <ul className="space-y-3">
+          {inquiries.map((m) => (
+            <li key={m.id} className={`${card} p-4`}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-sm font-semibold capitalize">{m.subject}</span>
+                <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${INQ_STATUS[m.status]?.tone ?? 'bg-slate-100'}`}>{INQ_STATUS[m.status]?.label ?? m.status}</span>
+              </div>
+              <p className="mt-2 line-clamp-3 whitespace-pre-line text-sm text-[#3b4266]">{m.message}</p>
+              <p className="mt-2 text-xs text-[#687194]">Sent {fmtDate(m.createdAt)}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+/* ------------------------------ Profile ------------------------------ */
+
+function Profile() {
+  const { customer, updateProfile, changePassword } = useCustomer()
+  const [name, setName] = useState(customer?.name || '')
+  const [phone, setPhone] = useState(customer?.phone || '')
+  const [savingProfile, setSavingProfile] = useState(false)
+  const [current, setCurrent] = useState('')
+  const [next, setNext] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [pwError, setPwError] = useState<string | null>(null)
+  const [savingPw, setSavingPw] = useState(false)
+
+  useEffect(() => {
+    setName(customer?.name || '')
+    setPhone(customer?.phone || '')
+  }, [customer?.name, customer?.phone])
+
+  if (!customer) return null
+
+  return (
+    <div className="space-y-6">
+      <SectionTitle title="Profile & addresses" subtitle="Keep your details up to date for faster checkout." />
+
+      <div className="grid gap-6 xl:grid-cols-2 [&>*]:min-w-0">
+        <form
+          className={`${card} space-y-4 p-5`}
+          onSubmit={async (e) => {
+            e.preventDefault()
+            setSavingProfile(true)
+            const r = await updateProfile({ name, phone })
+            setSavingProfile(false)
+            if (r.success) toast.success('Profile saved')
+            else toast.error(r.message || 'Could not save your profile')
+          }}
+        >
+          <h3 className="flex items-center gap-2 font-semibold">
+            <User className="h-4 w-4 text-[#424a70]" aria-hidden /> Personal details
+          </h3>
+          <div>
+            <label htmlFor="pf-name" className={labelCls}>
+              Full name
+            </label>
+            <input id="pf-name" required value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" className={inputCls} />
+          </div>
+          <div>
+            <label htmlFor="pf-email" className={labelCls}>
+              Email
+            </label>
+            <input id="pf-email" value={customer.email} readOnly className={`${inputCls} bg-slate-50 text-[#687194]`} />
+            <p className="mt-1 text-xs text-[#687194]">{customer.emailVerified ? '✓ Verified' : 'Not verified yet'} · contact us to change your email.</p>
+          </div>
+          <div>
+            <label htmlFor="pf-phone" className={labelCls}>
+              Mobile number
+            </label>
+            <input id="pf-phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" placeholder="98765 43210" className={inputCls} />
+          </div>
+          <button type="submit" disabled={savingProfile} className={btnPrimary}>
+            {savingProfile ? 'Saving…' : 'Save details'}
+          </button>
+        </form>
+
+        <form
+          className={`${card} space-y-4 p-5`}
+          onSubmit={async (e) => {
+            e.preventDefault()
+            const problem = passwordProblem(next) || (next !== confirm ? 'The new passwords do not match.' : null)
+            setPwError(problem)
+            if (problem) return
+            setSavingPw(true)
+            const r = await changePassword({ currentPassword: current, newPassword: next })
+            setSavingPw(false)
+            if (r.success) {
+              toast.success('Password updated. Other devices were signed out.')
+              setCurrent('')
+              setNext('')
+              setConfirm('')
+            } else setPwError(r.message || 'Could not update your password')
+          }}
+        >
+          <h3 className="flex items-center gap-2 font-semibold">
+            <ShieldCheck className="h-4 w-4 text-[#424a70]" aria-hidden /> Password &amp; security
+          </h3>
+          <div>
+            <label htmlFor="pw-current" className={labelCls}>
+              Current password
+            </label>
+            <input id="pw-current" type="password" required value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" className={inputCls} />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor="pw-new" className={labelCls}>
+                New password
+              </label>
+              <input id="pw-new" type="password" required value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" className={inputCls} />
+            </div>
+            <div>
+              <label htmlFor="pw-confirm" className={labelCls}>
+                Confirm new password
+              </label>
+              <input id="pw-confirm" type="password" required value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" className={inputCls} />
+            </div>
+          </div>
+          <p className="text-xs text-[#687194]">{PASSWORD_HINT}</p>
+          {pwError && (
+            <p role="alert" className="text-sm text-rose-700">
+              {pwError}
+            </p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <button type="submit" disabled={savingPw} className={btnPrimary}>
+              {savingPw ? 'Updating…' : 'Update password'}
+            </button>
+            <SignOutEverywhere />
+          </div>
+        </form>
+      </div>
+
+      <AddressBook />
+    </div>
+  )
+}
+
+function SignOutEverywhere() {
+  const router = useRouter()
+  const { logout } = useCustomer()
+  return (
+    <button
+      type="button"
+      className={btnSecondary}
+      onClick={async () => {
+        if (!window.confirm('Sign out of UNIFORT on all your devices?')) return
+        await api.post('/auth/logout-all')
+        await logout()
+        router.replace('/login')
+      }}
+    >
+      Sign out everywhere
+    </button>
+  )
+}
+
+const emptyAddress = { label: '', recipientName: '', phone: '', addressLine1: '', addressLine2: '', city: '', state: '', postalCode: '', isDefault: false }
+
+function AddressBook() {
+  const { customer, refreshProfile } = useCustomer()
+  const addresses = customer?.addresses || []
+  const [editing, setEditing] = useState<CustomerAddress | 'new' | null>(null)
+  const [form, setForm] = useState(emptyAddress)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const open = (a: CustomerAddress | 'new') => {
+    setEditing(a)
+    setError(null)
+    setForm(
+      a === 'new'
+        ? { ...emptyAddress, recipientName: customer?.name || '', phone: customer?.phone || '', isDefault: addresses.length === 0 }
+        : {
+            label: a.label || '',
+            recipientName: a.recipientName,
+            phone: a.phone,
+            addressLine1: a.addressLine1,
+            addressLine2: a.addressLine2 || '',
+            city: a.city,
+            state: a.state,
+            postalCode: a.postalCode,
+            isDefault: a.isDefault,
+          }
+    )
+  }
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!/^\d{6}$/.test(form.postalCode.trim())) return setError('PIN code must be 6 digits.')
+    setSaving(true)
+    const payload = { ...form, label: form.label || null, addressLine2: form.addressLine2 || null, country: 'India' }
+    const res = editing === 'new' ? await api.post('/addresses', payload) : await api.put(`/addresses/${(editing as CustomerAddress).id}`, payload)
+    setSaving(false)
+    if (!res.success) return setError(errorMessage(res))
+    toast.success('Address saved')
+    setEditing(null)
+    refreshProfile()
+  }
+
+  const remove = async (a: CustomerAddress) => {
+    if (!window.confirm('Delete this address?')) return
+    const res = await api.delete(`/addresses/${a.id}`)
+    if (res.success) {
+      toast.success('Address deleted')
+      refreshProfile()
+    } else toast.error(errorMessage(res))
+  }
+
+  const makeDefault = async (a: CustomerAddress) => {
+    const res = await api.put(`/addresses/${a.id}`, { isDefault: true })
+    if (res.success) {
+      toast.success('Default address updated')
+      refreshProfile()
+    } else toast.error(errorMessage(res))
+  }
+
+  const f = (k: keyof typeof emptyAddress) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setForm((x) => ({ ...x, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))
+
+  return (
+    <div className={`${card} p-5`}>
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h3 className="flex items-center gap-2 font-semibold">
+          <MapPin className="h-4 w-4 text-[#424a70]" aria-hidden /> Saved addresses
+        </h3>
+        <button type="button" onClick={() => open('new')} className={btnSecondary}>
+          <Plus className="h-4 w-4" aria-hidden /> Add address
+        </button>
+      </div>
+      {addresses.length === 0 ? (
+        <p className="text-sm text-[#687194]">No saved addresses yet. Addresses you add here are offered at checkout.</p>
+      ) : (
+        <ul className="grid gap-3 md:grid-cols-2">
+          {addresses.map((a) => (
+            <li key={a.id} className={`rounded-xl border p-4 text-sm ${a.isDefault ? 'border-[#424a70] bg-[#424a70]/5' : 'border-[#424a70]/15'}`}>
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <span className="font-semibold">{a.label || a.recipientName}</span>
+                {a.isDefault && <span className="rounded-full bg-[#424a70] px-2 py-0.5 text-[11px] font-semibold text-white">Default</span>}
+              </div>
+              <p className="text-[#3b4266]">
+                {a.recipientName} · {a.phone}
+                <br />
+                {a.addressLine1}
+                {a.addressLine2 ? `, ${a.addressLine2}` : ''}
+                <br />
+                {a.city}, {a.state} {a.postalCode}
+              </p>
+              <div className="mt-3 flex flex-wrap gap-4 text-sm font-medium">
+                <button type="button" onClick={() => open(a)} className="text-[#424a70] hover:underline">
+                  Edit
+                </button>
+                {!a.isDefault && (
+                  <button type="button" onClick={() => makeDefault(a)} className="text-[#424a70] hover:underline">
+                    Make default
+                  </button>
+                )}
+                <button type="button" onClick={() => remove(a)} className="text-rose-700 hover:underline">
+                  Delete
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {editing && (
+        <Dialog title={editing === 'new' ? 'Add address' : 'Edit address'} onClose={() => setEditing(null)}>
+          <form onSubmit={save} className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-2 [&>*]:min-w-0">
+              <div>
+                <label htmlFor="ad-label" className={labelCls}>
+                  Label (optional)
+                </label>
+                <input id="ad-label" value={form.label} onChange={f('label')} placeholder="Home, Office…" className={inputCls} />
+              </div>
+              <div>
+                <label htmlFor="ad-name" className={labelCls}>
+                  Recipient name
+                </label>
+                <input id="ad-name" required value={form.recipientName} onChange={f('recipientName')} className={inputCls} />
+              </div>
+            </div>
+            <div>
+              <label htmlFor="ad-phone" className={labelCls}>
+                Mobile number
+              </label>
+              <input id="ad-phone" required type="tel" value={form.phone} onChange={f('phone')} className={inputCls} />
+            </div>
+            <div>
+              <label htmlFor="ad-l1" className={labelCls}>
+                Address line 1
+              </label>
+              <input id="ad-l1" required value={form.addressLine1} onChange={f('addressLine1')} autoComplete="address-line1" className={inputCls} />
+            </div>
+            <div>
+              <label htmlFor="ad-l2" className={labelCls}>
+                Address line 2 (optional)
+              </label>
+              <input id="ad-l2" value={form.addressLine2} onChange={f('addressLine2')} autoComplete="address-line2" className={inputCls} />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div>
+                <label htmlFor="ad-city" className={labelCls}>
+                  City
+                </label>
+                <input id="ad-city" required value={form.city} onChange={f('city')} className={inputCls} />
+              </div>
+              <div>
+                <label htmlFor="ad-state" className={labelCls}>
+                  State
+                </label>
+                <input id="ad-state" required value={form.state} onChange={f('state')} className={inputCls} />
+              </div>
+              <div>
+                <label htmlFor="ad-pin" className={labelCls}>
+                  PIN code
+                </label>
+                <input id="ad-pin" required inputMode="numeric" maxLength={6} value={form.postalCode} onChange={f('postalCode')} className={inputCls} />
+              </div>
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={form.isDefault} onChange={f('isDefault')} className="h-4 w-4" /> Use as my default address
+            </label>
+            {error && (
+              <p role="alert" className="text-sm text-rose-700">
+                {error}
+              </p>
+            )}
+            <div className="flex justify-end gap-2 pt-1">
+              <button type="button" onClick={() => setEditing(null)} className={btnSecondary}>
+                Cancel
+              </button>
+              <button type="submit" disabled={saving} className={btnPrimary}>
+                {saving ? 'Saving…' : 'Save address'}
+              </button>
+            </div>
+          </form>
+        </Dialog>
+      )}
+    </div>
+  )
+}
+
+/* ------------------------------ Dialog ------------------------------ */
+
+function Dialog({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    window.addEventListener('keydown', onKey)
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      document.body.style.overflow = ''
+    }
+  }, [onClose])
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center sm:p-4" onClick={onClose}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="acct-dialog-title"
+        onClick={(e) => e.stopPropagation()}
+        className="max-h-[92vh] w-full overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl sm:max-w-lg sm:rounded-3xl"
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h2 id="acct-dialog-title" className="text-lg font-semibold">
+            {title}
+          </h2>
+          <button type="button" onClick={onClose} aria-label="Close" className="rounded-lg p-1.5 text-[#687194] hover:bg-slate-100">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
   )
 }

@@ -88,10 +88,10 @@ export function BagDrawer() {
         ) : (
           <>
             <div className="bag-drawer-items">
-              {items.map(({ product, quantity }) => {
-                const itemTotal = parsePrice(product.price) * quantity
+              {items.map(({ key, product, quantity, designTitle }) => {
+                const itemTotal = (product.rawPrice ?? parsePrice(product.price)) * quantity
                 return (
-                  <div key={product.name} className="bag-item">
+                  <div key={key} className="bag-item">
                     <div className="bag-item-image">
                       <Image src={product.image} alt={product.name} fill sizes="80px" />
                     </div>
@@ -99,11 +99,11 @@ export function BagDrawer() {
                       <div className="bag-item-head">
                         <div>
                           <h4>{product.name}</h4>
-                          <p className="muted">{product.type}</p>
+                          <p className="muted">{designTitle ? `Custom design: ${designTitle}` : product.type}</p>
                         </div>
                         <button
                           className="bag-remove-btn"
-                          onClick={() => removeFromBag(product.name)}
+                          onClick={() => removeFromBag(key)}
                           aria-label={`Remove ${product.name} from bag`}
                           title="Remove item"
                         >
@@ -114,14 +114,14 @@ export function BagDrawer() {
                       <div className="bag-item-foot">
                         <div className="quantity-control">
                           <button
-                            onClick={() => updateQuantity(product.name, -1)}
+                            onClick={() => updateQuantity(key, -1)}
                             aria-label={`Decrease quantity of ${product.name}`}
                           >
                             <Minus />
                           </button>
                           <span className="qty-value">{quantity}</span>
                           <button
-                            onClick={() => updateQuantity(product.name, 1)}
+                            onClick={() => updateQuantity(key, 1)}
                             aria-label={`Increase quantity of ${product.name}`}
                           >
                             <Plus />
@@ -142,23 +142,11 @@ export function BagDrawer() {
 
             <div className="bag-drawer-footer">
               <div className="summary-row">
-                <span className="text-xs text-[#687194]">Subtotal</span>
+                <span className="text-xs text-[#687194]">Subtotal (estimated)</span>
                 <strong className="text-sm font-semibold text-[#1c2033]">₹{totalPrice.toLocaleString()}</strong>
               </div>
-              <div className="summary-row">
-                <span className="text-xs text-[#687194]">Archival Insured Shipping</span>
-                <span className="text-xs font-medium text-emerald-600">
-                  {totalPrice >= 500 ? 'Complimentary' : '₹40'}
-                </span>
-              </div>
-              <div className="summary-row border-t border-[rgba(66,74,112,0.12)] pt-2 mt-1">
-                <span className="text-xs font-semibold text-[#1c2033]">Estimated Total</span>
-                <strong className="text-base font-serif font-bold text-[#424a70]">
-                  ₹{(totalPrice + (totalPrice >= 500 ? 0 : 40)).toLocaleString()}
-                </strong>
-              </div>
               <p className="shipping-note text-[11px] text-[#687194] leading-relaxed mt-1">
-                All taxes & archival mineral packaging included. Ships direct from our Chennai atelier.
+                Shipping, GST and promo codes are calculated at checkout.
               </p>
 
               <div className="flex flex-col gap-2 mt-4">

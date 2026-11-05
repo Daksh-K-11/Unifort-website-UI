@@ -18,8 +18,7 @@ import {
   Sparkles,
   ChevronRight,
   Shield,
-  Lock,
-} from 'lucide-react'
+  Lock, Tag } from 'lucide-react'
 import { useAdminAuth } from './admin-auth-context'
 import { AdminSection } from './admin-types'
 
@@ -45,16 +44,17 @@ export function AdminSidebar({
     adminOnly?: boolean
     badge?: string
   }> = [
-    { id: 'overview', label: 'Executive Overview', icon: LayoutDashboard },
-    { id: '3d-studio', label: '3D Studio & Production', icon: Sparkles, badge: 'Queue' },
-    { id: 'orders', label: 'Orders & Fulfillment', icon: ShoppingBag },
-    { id: 'products', label: 'Products & Drafts', icon: Box },
-    { id: 'categories', label: 'Taxonomy & Collections', icon: FolderTree },
-    { id: 'media', label: 'Media & Asset Library', icon: ImageIcon },
-    { id: 'inquiries', label: 'Inquiries & Commissions', icon: Mail },
-    { id: 'reviews', label: 'Review Moderation', icon: MessageSquareQuote },
-    { id: 'users', label: 'User & Staff RBAC', icon: Users, adminOnly: true },
-    { id: 'audit-logs', label: 'Security Audit Logs', icon: ShieldAlert, adminOnly: true },
+    { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+    { id: '3d-studio', label: 'Custom designs', icon: Sparkles, badge: 'Queue' },
+    { id: 'orders', label: 'Orders', icon: ShoppingBag },
+    { id: 'products', label: 'Products', icon: Box },
+    { id: 'categories', label: 'Categories', icon: FolderTree },
+    { id: 'media', label: 'Media library', icon: ImageIcon },
+    { id: 'inquiries', label: 'Inquiries', icon: Mail },
+    { id: 'reviews', label: 'Reviews', icon: MessageSquareQuote },
+    { id: 'coupons', label: 'Promo Codes', icon: Tag, adminOnly: true },
+    { id: 'users', label: 'Users & staff', icon: Users, adminOnly: true },
+    { id: 'audit-logs', label: 'Audit log', icon: ShieldAlert, adminOnly: true },
   ]
 
   const handleNavClick = (section: AdminSection) => {

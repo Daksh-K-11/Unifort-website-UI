@@ -13,51 +13,55 @@ interface AdminHeaderProps {
 
 const sectionTitles: Record<AdminSection, { title: string; subtitle: string }> = {
   overview: {
-    title: 'Executive Atelier Overview',
-    subtitle: 'System health, KPIs, revenue analytics, and draft pipeline.',
+    title: 'Overview',
+    subtitle: 'What needs your attention today.',
   },
   '3d-studio': {
-    title: '3D Studio & Production',
-    subtitle: 'Atelier custom queue, surface configurations, and kiln firing notes.',
+    title: 'Custom designs',
+    subtitle: 'Review customer 3D designs and track their production.',
   },
   orders: {
-    title: 'Orders & Fulfillment Pipeline',
-    subtitle: 'Customer acquisitions, bespoke snapshots, and shipment status.',
+    title: 'Orders',
+    subtitle: 'Process, ship, cancel and refund orders.',
   },
   products: {
-    title: 'Products & Drafts Catalog',
-    subtitle: 'Permanent tableware collection, 3D meshes, and draft lifecycle.',
+    title: 'Products',
+    subtitle: 'Add, edit, publish and restock products.',
   },
   categories: {
-    title: 'Taxonomy & Collections',
-    subtitle: 'Material, tableware, and lifestyle categorization.',
+    title: 'Categories',
+    subtitle: 'Group products for the storefront.',
   },
   inquiries: {
-    title: 'Inquiries & Hospitality Commissions',
-    subtitle: 'Bespoke estimates, restaurant dining ware, and trade requests.',
+    title: 'Inquiries',
+    subtitle: 'Messages from customers and businesses.',
   },
   reviews: {
-    title: 'Product Reviews & Moderation',
-    subtitle: 'Customer ratings, tactile feedback, and verification moderation.',
+    title: 'Reviews',
+    subtitle: 'Approve or reject customer reviews.',
   },
   users: {
-    title: 'User & Staff RBAC Management',
-    subtitle: 'Access rights, staff credentials, and role assignments (Admin only).',
+    title: 'Users & staff',
+    subtitle: 'Manage accounts and roles (admin only).',
   },
   media: {
-    title: 'Media & Digital Assets',
-    subtitle: 'Upload, preview, copy paths, and manage storefront tableware photography and assets.',
+    title: 'Media library',
+    subtitle: 'Upload and manage images and 3D models.',
+  },
+  coupons: {
+    title: 'Promo Codes',
+    subtitle: 'Create and manage discount codes applied at checkout (Admin only).',
   },
   'audit-logs': {
-    title: 'Security Audit Trail',
-    subtitle: 'Tamper-resistant cryptographic activity logs (Admin only).',
+    title: 'Audit log',
+    subtitle: 'Record of every administrative change (Admin only).',
   },
 }
 
 export function AdminHeader({ currentSection, onOpenMobile }: AdminHeaderProps) {
   const { currentUser, logout } = useAdminAuth()
   const info = sectionTitles[currentSection] || {
-    title: 'Atelier Admin',
+    title: 'UNIFORT admin',
     subtitle: 'Management dashboard',
   }
 
@@ -85,17 +89,6 @@ export function AdminHeader({ currentSection, onOpenMobile }: AdminHeaderProps) 
         {/* Theme Toggle (System / Light / Dark) */}
         <AdminThemeToggle />
 
-        {/* Live Swagger link */}
-        <a
-          href="http://localhost:5000/api-docs"
-          target="_blank"
-          rel="noreferrer"
-          className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-lg adm-card adm-border text-xs adm-text-secondary hover:adm-text-primary transition-colors"
-          title="Open interactive Swagger UI in backend"
-        >
-          <FileCode className="w-3.5 h-3.5 text-[#8b97d1]" />
-          <span>Swagger Docs</span>
-        </a>
 
         {/* Security badge */}
         {/* <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs">

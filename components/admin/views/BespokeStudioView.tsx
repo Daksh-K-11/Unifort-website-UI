@@ -18,7 +18,8 @@ import {
 } from 'lucide-react'
 import { useAdminAuth } from '../admin-auth-context'
 import { CustomDesignItem, CustomDesignStatus } from '../admin-types'
-import { api } from '../../../lib/api-client'
+import { api, mediaUrl } from '@/lib/api-client'
+import { notify, useDebounced } from '../admin-ui'
 import { AdminPagination } from '../AdminPagination'
 
 const modelTypeOptions = [
@@ -89,6 +90,7 @@ export function BespokeStudioView() {
   const [modelTypeFilter, setModelTypeFilter] = useState<string>('ALL')
   const [finishFilter, setFinishFilter] = useState<string>('ALL')
   const [searchQuery, setSearchQuery] = useState('')
+  const debouncedSearch = useDebounced(searchQuery)
   const [timeRange, setTimeRange] = useState<string>('ALL')
   const [customStartDate, setCustomStartDate] = useState('')
   const [customEndDate, setCustomEndDate] = useState('')
@@ -146,16 +148,17 @@ export function BespokeStudioView() {
       queryParams.set('limit', String(limit))
       if (statusFilter !== 'ALL') queryParams.set('status', statusFilter)
       if (modelTypeFilter !== 'ALL') queryParams.set('modelType', modelTypeFilter)
-      if (searchQuery.trim()) queryParams.set('search', searchQuery.trim())
+      if (finishFilter !== 'ALL') queryParams.set('finish', finishFilter.toLowerCase())
+      if (debouncedSearch.trim()) queryParams.set('search', debouncedSearch.trim())
       if (startDate) queryParams.set('startDate', startDate)
       if (endDate) queryParams.set('endDate', endDate)
       queryParams.set('sortBy', sortBy)
 
-      const res = await api.get(`/customize/admin/designs?${queryParams.toString()}`, {}, true)
+      const res = await api.get(`/customize/admin/designs?${queryParams.toString()}`)
 
       if (res.success && res.data) {
         const rawList = Array.isArray(res.data) ? res.data : (res.data.data || res.data.designs || [])
-        let mapped: CustomDesignItem[] = rawList.map((d: any) => ({
+        const mapped: CustomDesignItem[] = rawList.map((d: any) => ({
           id: d.id,
           userId: d.userId,
           user: d.user
@@ -178,23 +181,13 @@ export function BespokeStudioView() {
           status: d.status as CustomDesignStatus,
           finish: d.finish || d.state?.finish || 'matte',
           designState: d.state || d.designState,
-          snapshotUrl:
-            d.thumbnailUrl ||
-            d.snapshotUrl ||
-            d.previewUrl ||
-            d.state?.thumbnailUrl ||
-            d.state?.snapshotUrl ||
-            d.product?.imageUrl,
+          snapshotUrl: d.thumbnailUrl ? mediaUrl(d.thumbnailUrl) : d.product?.image ? mediaUrl(d.product.image) : undefined,
           productionNotes: d.productionNotes,
           craftsmanNotes: d.craftsmanNotes,
           createdAt: d.createdAt,
           updatedAt: d.updatedAt,
         }))
 
-        // Optional client filter for finish if specified
-        if (finishFilter !== 'ALL') {
-          mapped = mapped.filter((m) => m.finish?.toLowerCase() === finishFilter.toLowerCase())
-        }
 
         setDesigns(mapped)
 
@@ -227,7 +220,7 @@ export function BespokeStudioView() {
     statusFilter,
     modelTypeFilter,
     finishFilter,
-    searchQuery,
+    debouncedSearch,
     getDateRangeParams,
     sortBy,
   ])
@@ -239,7 +232,7 @@ export function BespokeStudioView() {
   const handleOpenInspect = (design: CustomDesignItem) => {
     setSelectedDesign(design)
     setStatusUpdateInput(design.status)
-    setCraftsmanNoteInput(design.craftsmanNotes || '')
+    setCraftsmanNoteInput('')
     setIsInspectModalOpen(true)
   }
 
@@ -247,26 +240,17 @@ export function BespokeStudioView() {
     e.preventDefault()
     if (!selectedDesign) return
 
-    const updated: CustomDesignItem = {
-      ...selectedDesign,
+    // The note box adds a new timestamped entry; existing notes are kept by the server.
+    const res = await api.patch(`/customize/admin/designs/${selectedDesign.id}/status`, {
       status: statusUpdateInput,
-      craftsmanNotes: craftsmanNoteInput,
-      updatedAt: new Date().toISOString(),
-    }
-
+      ...(craftsmanNoteInput.trim() && { craftsmanNotes: craftsmanNoteInput.trim() }),
+    })
+    if (!notify(res, 'Production status updated')) return
+    const updated: CustomDesignItem = { ...selectedDesign, status: res.data.status, craftsmanNotes: res.data.craftsmanNotes, updatedAt: res.data.updatedAt }
     setDesigns((prev) => prev.map((d) => (d.id === selectedDesign.id ? updated : d)))
     setSelectedDesign(updated)
+    setCraftsmanNoteInput('')
     setIsInspectModalOpen(false)
-
-    await api.patch(
-      `/customize/admin/designs/${selectedDesign.id}/status`,
-      {
-        status: statusUpdateInput,
-        craftsmanNotes: craftsmanNoteInput,
-      },
-      {},
-      true
-    )
   }
 
   // Active filter count
@@ -383,13 +367,11 @@ export function BespokeStudioView() {
             >
               <option value="ALL">All Production Stages</option>
               <option value="SAVED">SAVED (Drafting by Patron)</option>
-              <option value="ORDERED">ORDERED (Commission Placed)</option>
               <option value="SUBMITTED">SUBMITTED (Awaiting Review)</option>
               <option value="IN_REVIEW">IN_REVIEW (Verifying 300 DPI Specs)</option>
               <option value="APPROVED">APPROVED (Glaze Prep & Wheel)</option>
               <option value="IN_PRODUCTION">IN_PRODUCTION (In Kiln Firing)</option>
               <option value="COMPLETED">COMPLETED (Inspected & Packed)</option>
-              <option value="ARCHIVED">ARCHIVED</option>
               <option value="REJECTED">REJECTED (Specs Not Viable)</option>
             </select>
           </div>
@@ -840,10 +822,17 @@ export function BespokeStudioView() {
 
               {/* Craftsman Kiln Notes (Strictly non-italic) */}
               <div>
-                <label className="block text-[11px] uppercase tracking-wider adm-text-muted font-medium mb-1.5">
-                  Craftsman Kiln & Glaze Notes
+                {selectedDesign?.craftsmanNotes && (
+                  <pre className="mb-2 p-3 rounded-xl border adm-border text-[11px] whitespace-pre-wrap font-sans adm-text-secondary max-h-40 overflow-y-auto">
+                    {selectedDesign.craftsmanNotes}
+                  </pre>
+                )}
+                <label htmlFor="craft-note" className="block text-[11px] uppercase tracking-wider adm-text-muted font-medium mb-1.5">
+                  Add a production note
                 </label>
                 <textarea
+                  id="craft-note"
+                  maxLength={2000}
                   value={craftsmanNoteInput}
                   onChange={(e) => setCraftsmanNoteInput(e.target.value)}
                   placeholder="e.g. Stoneware reduction fired at 1280°C. Verified satin finish and 300 DPI metallic decal alignment."

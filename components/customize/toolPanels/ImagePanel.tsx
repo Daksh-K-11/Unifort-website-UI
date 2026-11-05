@@ -2,6 +2,7 @@
 
 import React, { useRef, useState } from 'react'
 import { DesignElement } from '@/lib/customize/types'
+import { uploadArtwork } from '@/lib/customize/storage'
 import {
   AlignCenter,
   AlertCircle,
@@ -70,13 +71,20 @@ export function ImagePanel({
       if (result) {
         // Measure natural dimensions
         const img = new Image()
-        img.onload = () => {
+        img.onload = async () => {
           const aspect = img.width / img.height
+          // Store the artwork on the server; the design keeps a small URL instead of base64.
+          const uploaded = await uploadArtwork(file)
           setIsUploading(false)
+          if (!uploaded.ok) {
+            setErrorMsg(uploaded.message)
+            return
+          }
+          const src = uploaded.data
 
           if (isReplace && selectedImageElement) {
             onUpdateElement(selectedImageElement.id, {
-              src: result,
+              src,
               name: file.name,
               aspectRatio: aspect,
             })
@@ -93,11 +101,15 @@ export function ImagePanel({
               scale: 1,
               opacity: 1,
               zIndex: elements.length + 1,
-              src: result,
+              src,
               name: file.name,
               aspectRatio: aspect,
             })
           }
+        }
+        img.onerror = () => {
+          setIsUploading(false)
+          setErrorMsg('This image could not be read. Please try a different file.')
         }
         img.src = result
       }

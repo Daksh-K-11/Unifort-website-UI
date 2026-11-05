@@ -11,8 +11,10 @@ import {
   ProductColors,
   SavedDesign,
 } from '@/lib/customize/types'
-import { CUSTOMIZABLE_PRODUCTS, calculateCustomPrice, getProductById } from '@/lib/customize/products'
-import { getSavedDesigns, saveDesign } from '@/lib/customize/storage'
+import { CUSTOMIZABLE_PRODUCTS, calculateCustomPrice } from '@/lib/customize/products'
+import { getDesign, saveDesign, ServerDesign } from '@/lib/customize/storage'
+import { toast } from 'sonner'
+import { useCustomer } from '@/lib/customer-context'
 import {
   downloadBlob,
   downloadDataUrl,
@@ -55,11 +57,14 @@ type ToolTab = 'colors' | 'text' | 'image' | 'graphic' | 'pattern' | 'templates'
 export function CustomizeStudio() {
   const { addToBag, setIsBagOpen, setToastMessage } = useBag()
   const { customizableItems } = useProducts()
+  const { savedDesigns, refreshSavedDesigns } = useCustomer()
   const searchParams = useSearchParams()
 
   // Read URL params: if user came from a specific product card, auto-select it; otherwise start at Catalog!
   const initialPieceParam = searchParams.get('piece') || searchParams.get('product')
-  const itemsPool = customizableItems.length > 0 ? customizableItems : CUSTOMIZABLE_PRODUCTS
+  const initialDesignParam = searchParams.get('design')
+  // Only products served by the API can be ordered, so the studio never falls back to a static list.
+  const itemsPool = customizableItems
   const initialProduct = initialPieceParam
     ? itemsPool.find(
         (p) =>
@@ -122,6 +127,9 @@ export function CustomizeStudio() {
   const [savedDesignsOpen, setSavedDesignsOpen] = useState(false)
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
   const [currentSnapshot, setCurrentSnapshot] = useState<string>('')
+  // Server id of the design being edited (null = not saved yet, or locked because it was ordered).
+  const [designId, setDesignId] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
 
   // 3D Viewer Ref
   const viewerRef = useRef<ThreeProductViewerRef>(null)
@@ -226,6 +234,7 @@ export function CustomizeStudio() {
   // Product Selection from Catalog or Switcher
   const handleSelectProduct = (newProduct: CustomizableProduct) => {
     setProduct(newProduct)
+    setDesignId(null)
     setColors(newProduct.defaultColors)
     setFinish('satin')
     const initialSurface = newProduct.surfaces[0]?.id || 'front'
@@ -356,28 +365,47 @@ export function CustomizeStudio() {
     setSaveDialogOpen(true)
   }
 
-  const handleConfirmSave = (savedTitle: string) => {
+  /** Persist the current design on the server. Returns the saved design or null on failure. */
+  const persistDesign = async (designTitle: string, snapshot?: string): Promise<ServerDesign | null> => {
+    if (!product) return null
+    setSaving(true)
+    const state: DesignState = { productId: product.id, title: designTitle, colors, finish, activeSurfaceId, elements, backgroundPattern }
+    let productionSpec: Record<string, unknown> | undefined
+    try {
+      productionSpec = JSON.parse(generateProductionSpecJson(product, state))
+    } catch {
+      productionSpec = undefined
+    }
+    const res = await saveDesign(state, designTitle, snapshot ?? viewerRef.current?.captureSnapshot(), { existingId: designId, productionSpec })
+    setSaving(false)
+    if (!res.ok) {
+      toast.error(res.message)
+      return null
+    }
+    setDesignId(res.data.editable ? res.data.id : null)
+    // Server may have replaced inline artwork with stored file URLs.
+    if (res.data.state?.elements) setElements(res.data.state.elements)
+    refreshSavedDesigns()
+    return res.data
+  }
+
+  const handleConfirmSave = async (savedTitle: string) => {
     if (!product) return
     setTitle(savedTitle)
-    const state: DesignState = {
-      productId: product.id,
-      title: savedTitle,
-      colors,
-      finish,
-      activeSurfaceId,
-      elements,
-      backgroundPattern,
-    }
-    saveDesign(state, product.name, currentSnapshot)
-    setToastMessage(`Saved "${savedTitle}" to your atelier designs.`)
+    const saved = await persistDesign(savedTitle, currentSnapshot || undefined)
+    if (saved) toast.success(`Saved "${saved.title}"`)
   }
 
   // Load Saved Design
-  const handleLoadSavedDesign = (saved: SavedDesign) => {
-    const loadedProduct = getProductById(saved.productId)
-    if (loadedProduct) {
-      setProduct(loadedProduct)
+  const handleLoadSavedDesign = (saved: SavedDesign & Partial<ServerDesign>) => {
+    const loadedProduct = itemsPool.find((p) => p.id === saved.state?.productId || p.id === saved.productId)
+    if (!loadedProduct) {
+      toast.error('The piece for this design is no longer available to customise.')
+      return
     }
+    setProduct(loadedProduct)
+    setDesignId(saved.editable === false ? null : saved.id)
+    if (saved.editable === false) toast.message('This design has been ordered, so saving will create a new copy.')
     setColors(saved.state.colors)
     setFinish(saved.state.finish)
     setActiveSurfaceId(saved.state.activeSurfaceId)
@@ -427,22 +455,49 @@ export function CustomizeStudio() {
   }
 
   // Cart / Bag Integration
-  const handleAddToBag = () => {
-    if (!product) return
-    const priceNum = calculateCustomPrice(product, { finish, elements })
-    const snapshot = viewerRef.current?.captureSnapshot() || product.image
+  const handleAddToBag = async () => {
+    if (!product || saving) return
+    if (!product.dbProductId) {
+      toast.error('This piece is not available to order right now.')
+      return
+    }
+    if (elements.length === 0 && !backgroundPattern) {
+      toast.message('Tip: add text, artwork or a pattern to personalise your piece.')
+    }
+    // A customised piece is always backed by a saved design so the studio can produce it.
+    const saved = await persistDesign(title || `${product.name} custom`)
+    if (!saved) return
     const finishObj = product.supportedFinishes.find((f) => f.id === finish)
-
-    addToBag({
-      name: `${product.name} (Custom Atelier)`,
-      type: `${finishObj?.name || 'Custom'} · ${elements.length} Artwork Layer${elements.length === 1 ? '' : 's'}`,
-      price: `₹${priceNum}`,
-      image: snapshot,
-      category: 'Custom Tableware',
-    })
-
+    addToBag(
+      {
+        id: product.dbProductId,
+        name: product.name,
+        slug: product.id,
+        type: `${finishObj?.name || 'Custom'} · ${elements.length} layer${elements.length === 1 ? '' : 's'}`,
+        price: `₹${saved.estimatedPrice}`,
+        rawPrice: saved.estimatedPrice,
+        image: saved.thumbnailUrl || product.image,
+        category: product.category,
+      },
+      1,
+      { id: saved.id, title: saved.title, image: saved.thumbnailUrl, price: saved.estimatedPrice }
+    )
+    // The bag line now references this design; further edits go into a new design.
+    setDesignId(null)
     setIsBagOpen(true)
   }
+
+  // Open a saved design from a link (/customize?design=<id>)
+  const loadedDesignParam = useRef<string | null>(null)
+  useEffect(() => {
+    if (!initialDesignParam || itemsPool.length === 0 || loadedDesignParam.current === initialDesignParam) return
+    loadedDesignParam.current = initialDesignParam
+    getDesign(initialDesignParam).then((res) => {
+      if (res.ok) handleLoadSavedDesign(res.data)
+      else toast.error(res.message)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialDesignParam, itemsPool.length])
 
   // Surface change handler with automatic camera focusing!
   const handleChangeSurface = (sId: string) => {
@@ -458,7 +513,7 @@ export function CustomizeStudio() {
         <CustomizeCatalog
           onSelectProduct={handleSelectProduct}
           onOpenSavedDesigns={() => setSavedDesignsOpen(true)}
-          savedCount={typeof window !== 'undefined' ? getSavedDesigns().length : 0}
+          savedCount={savedDesigns.length}
         />
         {/* Saved Designs Modal accessible right from customize catalog page */}
         <SavedDesignsModal

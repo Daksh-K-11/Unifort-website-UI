@@ -26,6 +26,7 @@ export function ProductReviewsSection({
   const {
     customer,
     getProductReviews,
+    reviewStats,
     fetchProductReviews,
     checkReviewEligibility,
     setAuthModalOpen,
@@ -52,12 +53,11 @@ export function ProductReviewsSection({
   }, [productId, fetchProductReviews])
 
   const reviews = getProductReviews(productId)
-  const averageRating =
-    reviews.length > 0
-      ? (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1)
-      : '5.0'
-
-  const userReview = customer ? reviews.find((r) => r.userId === customer.id) : null
+  const stats = reviewStats[productId]
+  const count = stats?.count ?? reviews.length
+  const avg = stats?.averageRating ?? (reviews.length ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length : 0)
+  const averageRating = count > 0 ? avg.toFixed(1) : '—'
+  const userReview = eligibilityData?.alreadyReviewed ? eligibilityData.existingReview : null
 
   const handleOpenWrite = async () => {
     // 1. Force the user to sign in first before entering a review
@@ -85,28 +85,29 @@ export function ProductReviewsSection({
   }
 
   return (
-    <div className="mt-6 pt-5 border-t border-[#424a70]/12 space-y-4">
+    <div id="reviews" className="mt-6 pt-5 border-t border-[#424a70]/12 space-y-4 scroll-mt-24">
       {/* Header and Average */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
             <h4 className="text-xs uppercase tracking-wider text-[#424a70] font-semibold">
-              Tactile Feedback & Appraisal
+              Customer reviews
             </h4>
             <span className="text-[10px] text-emerald-700 bg-emerald-500/10 px-2 py-0.5 rounded-full font-mono">
-              Verified Patrons
+              Verified purchases
             </span>
           </div>
 
           <div className="flex items-center gap-2 mt-1">
             <div className="flex items-center text-amber-400">
               {[1, 2, 3, 4, 5].map((i) => (
-                <Star key={i} className="w-3.5 h-3.5 fill-amber-400" />
+                <Star key={i} aria-hidden className={`w-3.5 h-3.5 ${count > 0 && i <= Math.round(avg) ? 'fill-amber-400' : 'text-amber-200'}`} />
               ))}
+              <span className="sr-only">{count > 0 ? `Rated ${averageRating} out of 5` : 'No ratings yet'}</span>
             </div>
             <span className="text-xs font-mono font-bold text-[#1c2033]">{averageRating}</span>
             <span className="text-[11px] text-[#424a70]/60">
-              ({reviews.length} {reviews.length === 1 ? 'appraisal' : 'appraisals'})
+              ({count} {count === 1 ? 'review' : 'reviews'})
             </span>
           </div>
         </div>

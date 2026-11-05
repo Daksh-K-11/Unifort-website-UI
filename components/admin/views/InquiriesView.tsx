@@ -20,12 +20,13 @@ import { InquiryRecord, InquiryStatus } from '../admin-types'
 import { api } from '../../../lib/api-client'
 import { GlassDropdown, GlassDropdownOption } from '../../ui/GlassDropdown'
 import { AdminPagination } from '../AdminPagination'
+import { notify, useDebounced } from '../admin-ui'
 
 const inquiryStatusOptions: GlassDropdownOption[] = [
   { value: 'NEW', label: 'NEW', description: 'Fresh inquiry awaiting first response' },
   { value: 'IN_PROGRESS', label: 'IN_PROGRESS (Engaging with client)', description: 'Correspondence underway' },
   { value: 'RESOLVED', label: 'RESOLVED (Quote & contract agreed)', description: 'Commission or terms finalized' },
-  { value: 'CLOSED', label: 'CLOSED', description: 'Archived / completed' },
+  { value: 'ARCHIVED', label: 'ARCHIVED', description: 'Closed / no further action' },
 ]
 
 export function InquiriesView() {
@@ -38,6 +39,7 @@ export function InquiriesView() {
   const [typeFilter, setTypeFilter] = useState<string>('ALL')
   const [statusFilter, setStatusFilter] = useState<string>('ALL')
   const [searchQuery, setSearchQuery] = useState('')
+  const debouncedSearch = useDebounced(searchQuery)
   const [timeRange, setTimeRange] = useState<string>('ALL')
   const [customStartDate, setCustomStartDate] = useState('')
   const [customEndDate, setCustomEndDate] = useState('')
@@ -50,6 +52,7 @@ export function InquiriesView() {
     'BESPOKE_ORDER',
     'GENERAL',
     'STOCKIST',
+    'CARE_AND_REPAIR',
     'PRESS_MEDIA',
   ])
 
@@ -65,6 +68,9 @@ export function InquiriesView() {
   const [selectedInquiry, setSelectedInquiry] = useState<InquiryRecord | null>(null)
   const [statusInput, setStatusInput] = useState<InquiryStatus>('RESOLVED')
   const [notesInput, setNotesInput] = useState('')
+  const [replyInput, setReplyInput] = useState('')
+  const [replyResolve, setReplyResolve] = useState(false)
+  const [replying, setReplying] = useState(false)
 
   // Calculate ISO date strings based on timeRange preset
   const getDateRangeParams = useCallback(() => {
@@ -103,12 +109,12 @@ export function InquiriesView() {
       queryParams.set('limit', String(limit))
       if (typeFilter !== 'ALL') queryParams.set('type', typeFilter)
       if (statusFilter !== 'ALL') queryParams.set('status', statusFilter)
-      if (searchQuery.trim()) queryParams.set('search', searchQuery.trim())
+      if (debouncedSearch.trim()) queryParams.set('search', debouncedSearch.trim())
       if (startDate) queryParams.set('startDate', startDate)
       if (endDate) queryParams.set('endDate', endDate)
       queryParams.set('sortOrder', sortOrder)
 
-      const res = await api.get(`/inquiries?${queryParams.toString()}`, {}, true)
+      const res = await api.get(`/inquiries?${queryParams.toString()}`)
 
       if (res.success && res.data) {
         const rawList = Array.isArray(res.data) ? res.data : (res.data.inquiries || [])
@@ -118,7 +124,7 @@ export function InquiriesView() {
           email: inq.email || inq.user?.email || '',
           phone: inq.phone || inq.user?.phone || undefined,
           type: inq.type,
-          subject: inq.metadata?.subject || inq.subject || 'Atelier Commission Inquiry',
+          subject: inq.type?.replace(/_/g, ' ').toLowerCase(),
           message: inq.message,
           status: inq.status,
           notes: inq.adminNotes || inq.notes,
@@ -148,11 +154,6 @@ export function InquiriesView() {
           })
         }
 
-        // Dynamically populate inquiry types from backend
-        const extraTypes = (res.meta as any)?.filterOptions?.types
-        if (Array.isArray(extraTypes) && extraTypes.length > 0) {
-          setAvailableTypes(Array.from(new Set([...availableTypes, ...extraTypes])))
-        }
       }
     } catch (e) {
       console.error('Failed to load inquiries', e)
@@ -164,10 +165,9 @@ export function InquiriesView() {
     limit,
     typeFilter,
     statusFilter,
-    searchQuery,
+    debouncedSearch,
     getDateRangeParams,
     sortOrder,
-    availableTypes,
   ])
 
   useEffect(() => {
@@ -184,25 +184,25 @@ export function InquiriesView() {
     e.preventDefault()
     if (!selectedInquiry) return
 
-    const updated: InquiryRecord = {
-      ...selectedInquiry,
-      status: statusInput,
-      notes: notesInput,
-      updatedAt: new Date().toISOString(),
-    }
-
+    const res = await api.patch(`/inquiries/${selectedInquiry.id}`, { status: statusInput, adminNotes: notesInput })
+    if (!notify(res, 'Inquiry updated')) return
+    const updated: InquiryRecord = { ...selectedInquiry, status: statusInput, notes: notesInput, updatedAt: new Date().toISOString() }
     setInquiries((prev) => prev.map((i) => (i.id === selectedInquiry.id ? updated : i)))
     setSelectedInquiry(null)
+  }
 
-    await api.patch(
-      `/inquiries/${selectedInquiry.id}`,
-      {
-        status: statusInput,
-        adminNotes: notesInput,
-      },
-      {},
-      true
-    )
+  const handleSendReply = async () => {
+    if (!selectedInquiry || replyInput.trim().length < 5) return
+    setReplying(true)
+    const res = await api.post(`/inquiries/${selectedInquiry.id}/reply`, { message: replyInput.trim(), markResolved: replyResolve })
+    setReplying(false)
+    if (!notify(res, `Reply emailed to ${selectedInquiry.email}`)) return
+    const updated: InquiryRecord = { ...selectedInquiry, status: res.data.status, notes: res.data.adminNotes || '' }
+    setInquiries((prev) => prev.map((i) => (i.id === selectedInquiry.id ? updated : i)))
+    setSelectedInquiry(updated)
+    setStatusInput(updated.status)
+    setNotesInput(updated.notes || '')
+    setReplyInput('')
   }
 
   // Active filter count
@@ -338,7 +338,7 @@ export function InquiriesView() {
               <option value="NEW">NEW (Awaiting First Response)</option>
               <option value="IN_PROGRESS">IN_PROGRESS (Engaging)</option>
               <option value="RESOLVED">RESOLVED (Quote & Agreement)</option>
-              <option value="CLOSED">CLOSED (Completed / Archived)</option>
+              <option value="ARCHIVED">ARCHIVED (Closed)</option>
             </select>
           </div>
         </div>
@@ -691,6 +691,32 @@ export function InquiriesView() {
                   rows={3}
                   className="w-full px-3.5 py-2.5 adm-input border rounded-xl text-xs not-italic focus:outline-none focus:border-[#424a70] resize-none"
                 />
+              </div>
+
+              <div className="p-3 rounded-xl border adm-border space-y-2">
+                <label htmlFor="inq-reply" className="block text-[11px] uppercase tracking-wider adm-text-muted font-medium">
+                  Reply to customer by email
+                </label>
+                <textarea
+                  id="inq-reply"
+                  value={replyInput}
+                  onChange={(e) => setReplyInput(e.target.value)}
+                  rows={3}
+                  className="w-full px-3.5 py-2.5 adm-input border rounded-xl text-xs focus:outline-none focus:border-[#424a70] resize-none"
+                />
+                <div className="flex items-center justify-between gap-2">
+                  <label className="flex items-center gap-1.5 text-xs adm-text-primary">
+                    <input type="checkbox" checked={replyResolve} onChange={(e) => setReplyResolve(e.target.checked)} /> Mark resolved
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleSendReply}
+                    disabled={replying || replyInput.trim().length < 5}
+                    className="px-3 py-2 rounded-xl border adm-border text-xs disabled:opacity-50"
+                  >
+                    {replying ? 'Sending…' : 'Send reply'}
+                  </button>
+                </div>
               </div>
 
               <div className="pt-2 flex items-center justify-end gap-2">

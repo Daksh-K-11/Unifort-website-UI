@@ -8,7 +8,7 @@ import { useAdminTheme } from './admin-theme-context'
 import { AdminThemeToggle } from './AdminThemeToggle'
 
 export function AdminAuthGate() {
-  const { login } = useAdminAuth()
+  const { login, isForbidden, logout } = useAdminAuth()
   const { resolvedTheme } = useAdminTheme()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -106,6 +106,18 @@ export function AdminAuthGate() {
               </div>
             </div>
 
+            {isForbidden && !error && (
+              <div className="flex items-start gap-2.5 p-3.5 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-700 text-xs leading-relaxed">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>
+                  You are signed in with a customer account, which cannot open the admin console. Sign in with a staff account below, or{' '}
+                  <button type="button" className="underline" onClick={() => logout()}>
+                    sign out
+                  </button>
+                  .
+                </span>
+              </div>
+            )}
             {error && (
               <div className="flex items-start gap-2.5 p-3.5 bg-red-500/10 border border-red-500/20 rounded-xl text-red-600 dark:text-red-400 text-xs leading-relaxed animate-in fade-in duration-200">
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />

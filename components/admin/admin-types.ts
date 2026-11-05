@@ -34,8 +34,9 @@ export type InquiryType =
   | 'HOSPITALITY_COMMISSION'
   | 'STOCKIST'
   | 'CARE_AND_REPAIR'
+  | 'PRESS_MEDIA'
 
-export type InquiryStatus = 'NEW' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED'
+export type InquiryStatus = 'NEW' | 'IN_PROGRESS' | 'RESOLVED' | 'ARCHIVED'
 
 export type ReviewStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
 
@@ -155,26 +156,46 @@ export interface OrderItemRecord {
 export interface OrderRecord {
   id: string
   orderNumber: string
-  userId: string
-  user?: {
-    name: string
-    email: string
-  }
+  userId: string | null
+  user?: { name: string; email: string }
+  customerName: string
+  customerEmail: string
+  customerPhone?: string | null
   status: OrderStatus
   paymentStatus: PaymentStatus
+  paymentMethod: 'RAZORPAY' | 'COD'
+  subtotal: number
+  discount: number
+  shippingFee: number
+  tax: number
   totalAmount: number
+  refundedAmount: number
+  couponCode?: string | null
   currency: string
   items: OrderItemRecord[]
   shippingAddress: {
     fullName: string
+    phone?: string
     addressLine1: string
+    addressLine2?: string
     city: string
     state: string
     postalCode: string
     country: string
   }
   customerNotes?: string
+  staffNotes?: string | null
+  carrier?: string | null
+  trackingNumber?: string | null
+  razorpayPaymentId?: string | null
+  allowedNextStatuses: OrderStatus[]
+  shippingMethod?: string
   createdAt: string
+  paidAt?: string | null
+  shippedAt?: string | null
+  deliveredAt?: string | null
+  cancelledAt?: string | null
+  cancelReason?: string | null
   updatedAt?: string
 }
 
@@ -239,5 +260,6 @@ export type AdminSection =
   | 'media'
   | 'inquiries'
   | 'reviews'
+  | 'coupons'
   | 'users'
   | 'audit-logs'

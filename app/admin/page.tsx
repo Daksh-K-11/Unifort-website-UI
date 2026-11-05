@@ -16,7 +16,9 @@ import { ReviewsView } from '@/components/admin/views/ReviewsView'
 import { UsersView } from '@/components/admin/views/UsersView'
 import { AuditLogsView } from '@/components/admin/views/AuditLogsView'
 import { MediaLibraryView } from '@/components/admin/views/MediaLibraryView'
+import { CouponsView } from '@/components/admin/views/CouponsView'
 import { AdminSection } from '@/components/admin/admin-types'
+import { Toaster } from 'sonner'
 
 function AdminDashboardContent() {
   const { isAuthenticated } = useAdminAuth()
@@ -47,6 +49,8 @@ function AdminDashboardContent() {
         return <InquiriesView />
       case 'reviews':
         return <ReviewsView />
+      case 'coupons':
+        return <CouponsView />
       case 'users':
         return <UsersView />
       case 'audit-logs':
@@ -80,6 +84,7 @@ function AdminDashboardContent() {
         <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
           {renderCurrentView()}
         </main>
+        <Toaster position="top-right" richColors closeButton />
       </div>
     </div>
   )

@@ -124,7 +124,7 @@ export function AuditLogsView() {
       if (endDate) queryParams.set('endDate', endDate)
       queryParams.set('sortOrder', sortOrder)
 
-      const res = await api.get(`/admin/audit-logs?${queryParams.toString()}`, {}, true)
+      const res = await api.get(`/admin/audit-logs?${queryParams.toString()}`)
 
       if (res.success && res.data) {
         const rawLogs = Array.isArray(res.data)
@@ -138,7 +138,7 @@ export function AuditLogsView() {
           action: l.action,
           resource: l.resource || undefined,
           details: l.details,
-          ipAddress: l.ipAddress || '127.0.0.1',
+          ipAddress: l.ipAddress || '—',
           userId: l.userId,
           userEmail: l.userEmail,
           userRole: l.userRole,

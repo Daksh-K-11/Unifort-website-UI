@@ -15,6 +15,8 @@ import {
 import { useAdminAuth } from '../admin-auth-context'
 import { ReviewRecord, ReviewStatus } from '../admin-types'
 import { api } from '../../../lib/api-client'
+import { notify, useDebounced, Spinner, confirmAction } from '../admin-ui'
+import { AdminPagination } from '../AdminPagination'
 
 export function ReviewsView() {
   const { canModerateReviews } = useAdminAuth()
@@ -24,11 +26,20 @@ export function ReviewsView() {
   const [statusFilter, setStatusFilter] = useState<string>('ALL')
   const [searchQuery, setSearchQuery] = useState('')
   const [modifyingReviewId, setModifyingReviewId] = useState<string | null>(null)
+  const debouncedSearch = useDebounced(searchQuery)
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(20)
+  const [meta, setMeta] = useState<{ total: number; totalPages: number; statusCounts: Record<string, number> }>({ total: 0, totalPages: 1, statusCounts: {} })
 
   const fetchReviews = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await api.get('/reviews/admin/all', {}, true)
+      const q = new URLSearchParams({ page: String(page), limit: String(limit) })
+      if (statusFilter !== 'ALL') q.set('status', statusFilter)
+      if (debouncedSearch.trim()) q.set('search', debouncedSearch.trim())
+      const res = await api.get(`/reviews/admin/all?${q}`)
+      if (!res.success) notify(res)
+      if (res.meta) setMeta({ total: res.meta.total ?? 0, totalPages: res.meta.totalPages ?? 1, statusCounts: res.meta.statusCounts || {} })
       if (res.success && Array.isArray(res.data)) {
         const mapped: ReviewRecord[] = res.data.map((r: any) => {
           let status: ReviewStatus = 'PENDING'
@@ -67,61 +78,40 @@ export function ReviewsView() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [page, limit, statusFilter, debouncedSearch])
+
+  useEffect(() => setPage(1), [statusFilter, debouncedSearch])
 
   useEffect(() => {
     fetchReviews()
   }, [fetchReviews])
 
   const handleModerate = async (id: string, newStatus: ReviewStatus) => {
-    setReviews((prev) => prev.map((r) => (r.id === id ? { ...r, status: newStatus } : r)))
-    try {
-      await api.patch(
-        `/reviews/${id}/moderate`,
-        { status: newStatus, isApproved: newStatus === 'APPROVED' },
-        {},
-        true
-      )
-    } catch (err) {
-      console.error('Failed to update review moderation status', err)
-      fetchReviews()
-    }
+    const res = await api.patch(`/reviews/${id}/moderate`, { status: newStatus })
+    if (notify(res, newStatus === 'APPROVED' ? 'Review approved — now visible on the product page' : `Review ${newStatus.toLowerCase()}`)) fetchReviews()
   }
 
   const handleDeleteReview = async (id: string) => {
-    if (!confirm('Are you sure you want to permanently delete this review?')) return
-    setReviews((prev) => prev.filter((r) => r.id !== id))
-    try {
-      await api.delete(`/reviews/${id}`, {}, true)
-    } catch (err) {
-      console.error('Failed to delete review', err)
-      fetchReviews()
-    }
+    if (!confirmAction('Permanently delete this review?')) return
+    const res = await api.delete(`/reviews/${id}`)
+    if (notify(res, 'Review deleted')) fetchReviews()
   }
 
-  const pendingCount = reviews.filter((r) => r.status === 'PENDING').length
-  const approvedCount = reviews.filter((r) => r.status === 'APPROVED').length
-  const rejectedCount = reviews.filter((r) => r.status === 'REJECTED').length
+  const pendingCount = meta.statusCounts.PENDING || 0
+  const approvedCount = meta.statusCounts.APPROVED || 0
+  const rejectedCount = meta.statusCounts.REJECTED || 0
 
-  const filteredReviews = reviews.filter((r) => {
-    const matchesStatus = statusFilter === 'ALL' || r.status === statusFilter
-    const matchesSearch =
-      r.comment.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (r.title && r.title.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (r.user && r.user.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (r.product && r.product.name.toLowerCase().includes(searchQuery.toLowerCase()))
-    return matchesStatus && matchesSearch
-  })
+  const filteredReviews = reviews
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-serif tracking-tight adm-text-primary font-medium">
-            Product Reviews & Tactile Feedback
+            Product reviews
           </h2>
           <p className="text-xs adm-text-muted mt-0.5">
-            Customer star ratings, tactile appraisal, and moderation verification. All new reviews start in Pending.
+            New reviews start as pending and appear on the storefront only once approved.
           </p>
         </div>
       </div>
@@ -130,7 +120,7 @@ export function ReviewsView() {
       <div className="adm-card border adm-border rounded-2xl p-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           {[
-            { id: 'ALL', label: `All Reviews (${reviews.length})` },
+            { id: 'ALL', label: `All reviews (${pendingCount + approvedCount + rejectedCount})` },
             { id: 'PENDING', label: `Pending (${pendingCount})` },
             { id: 'APPROVED', label: `Approved (${approvedCount})` },
             { id: 'REJECTED', label: `Rejected (${rejectedCount})` },
@@ -163,7 +153,9 @@ export function ReviewsView() {
       </div>
 
       {/* Reviews Table or Empty State */}
-      {filteredReviews.length === 0 ? (
+      {loading && reviews.length === 0 ? (
+        <div className="adm-card border adm-border rounded-2xl"><Spinner /></div>
+      ) : filteredReviews.length === 0 ? (
         <div className="p-12 rounded-2xl adm-card border adm-border flex flex-col items-center justify-center text-center">
           <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mb-3">
             <MessageSquareQuote className="w-6 h-6 text-amber-500 dark:text-amber-400" />
@@ -317,6 +309,7 @@ export function ReviewsView() {
         </div>
       </div>
       )}
+      <AdminPagination page={page} limit={limit} total={meta.total} totalPages={meta.totalPages} onPageChange={setPage} onLimitChange={(l) => { setLimit(l); setPage(1) }} itemName="reviews" />
     </div>
   )
 }

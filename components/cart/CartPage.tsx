@@ -1,79 +1,115 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import {
-  ArrowLeft,
-  ArrowRight,
-  Minus,
-  Plus,
-  ShoppingBag,
-  Trash2,
-  ShieldCheck,
-  Truck,
-  Sparkles,
-  Tag,
-  Check,
-} from 'lucide-react'
-import { parsePrice, useBag } from '@/lib/bag-context'
+import { ArrowLeft, ArrowRight, Minus, Plus, ShoppingBag, Tag, Trash2 } from 'lucide-react'
+import { MAX_LINE_QTY, useBag } from '@/lib/bag-context'
+import { formatINR } from '@/lib/api-client'
+import { readStoredCoupon, storeCoupon, useQuote } from '@/lib/use-quote'
 import { UnifortButton } from '@/components/ui/UnifortButton'
 
+export function SummaryRows({ quote, loading }: { quote: ReturnType<typeof useQuote>['quote']; loading: boolean }) {
+  if (!quote) return <p className="text-xs text-[#687194]">{loading ? 'Calculating…' : '—'}</p>
+  return (
+    <dl className="flex flex-col gap-2 text-xs" aria-busy={loading}>
+      <div className="flex justify-between">
+        <dt className="text-[#687194]">Subtotal</dt>
+        <dd>{formatINR(quote.subtotal)}</dd>
+      </div>
+      {quote.discount > 0 && (
+        <div className="flex justify-between text-emerald-700">
+          <dt>Discount {quote.coupon ? `(${quote.coupon.code})` : ''}</dt>
+          <dd>−{formatINR(quote.discount)}</dd>
+        </div>
+      )}
+      <div className="flex justify-between">
+        <dt className="text-[#687194]">Shipping</dt>
+        <dd>{quote.shippingFee === 0 ? 'Free' : formatINR(quote.shippingFee)}</dd>
+      </div>
+      <div className="flex justify-between">
+        <dt className="text-[#687194]">
+          GST ({Math.round(quote.taxRate * 100)}%){quote.taxIncluded ? ' included' : ''}
+        </dt>
+        <dd>{formatINR(quote.tax)}</dd>
+      </div>
+      <div className="flex justify-between border-t border-[#424a70]/12 pt-3 mt-1 text-sm font-semibold text-[#1c2033]">
+        <dt>Total</dt>
+        <dd>{formatINR(quote.total)}</dd>
+      </div>
+      {quote.shippingFee > 0 && quote.subtotal - quote.discount < quote.freeShippingThreshold && (
+        <p className="text-[11px] text-[#687194]">Add {formatINR(quote.freeShippingThreshold - (quote.subtotal - quote.discount))} more for free shipping.</p>
+      )}
+    </dl>
+  )
+}
+
+export function CouponField({ code, setCode }: { code: string; setCode: (c: string) => void }) {
+  const [input, setInput] = useState(code)
+  useEffect(() => setInput(code), [code])
+  return (
+    <form
+      className="flex gap-2"
+      onSubmit={(e) => {
+        e.preventDefault()
+        const c = input.trim().toUpperCase()
+        setCode(c)
+        storeCoupon(c)
+      }}
+    >
+      <label htmlFor="promo-code" className="sr-only">
+        Promo code
+      </label>
+      <div className="relative flex-1">
+        <Tag className="w-3.5 h-3.5 text-[#424a70]/50 absolute left-3 top-1/2 -translate-y-1/2" aria-hidden />
+        <input
+          id="promo-code"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="Promo code"
+          className="w-full pl-9 pr-3 py-2.5 bg-white border border-[#424a70]/20 rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
+          autoComplete="off"
+        />
+      </div>
+      {code ? (
+        <button
+          type="button"
+          className="px-3 text-xs rounded-xl border border-[#424a70]/20"
+          onClick={() => {
+            setCode('')
+            storeCoupon('')
+          }}
+        >
+          Remove
+        </button>
+      ) : (
+        <button type="submit" className="px-4 text-xs rounded-xl bg-[#424a70] text-white disabled:opacity-50" disabled={!input.trim()}>
+          Apply
+        </button>
+      )}
+    </form>
+  )
+}
+
 export function CartPage() {
-  const router = useRouter()
-  const { items, updateQuantity, removeFromBag, clearBag, totalPrice, totalCount } = useBag()
+  const { items, updateQuantity, removeFromBag, clearBag, totalCount, hydrated } = useBag()
+  const [coupon, setCoupon] = useState('')
+  useEffect(() => setCoupon(readStoredCoupon()), [])
+  const { quote, loading, error, problemProductId } = useQuote(coupon)
 
-  const [promoCode, setPromoCode] = useState('')
-  const [appliedDiscount, setAppliedDiscount] = useState<number>(0)
-  const [promoError, setPromoError] = useState<string | null>(null)
-  const [promoSuccess, setPromoSuccess] = useState<string | null>(null)
-
-  const handleApplyPromo = (e: React.FormEvent) => {
-    e.preventDefault()
-    setPromoError(null)
-    setPromoSuccess(null)
-
-    const clean = promoCode.trim().toUpperCase()
-    if (!clean) return
-
-    if (clean === 'ATELIER10' || clean === 'WELCOME10') {
-      const discount = Math.round(totalPrice * 0.1)
-      setAppliedDiscount(discount)
-      setPromoSuccess(`Voucher applied: 10% atelier patronage discount (Saved ₹${discount})`)
-    } else if (clean === 'FREESHIP') {
-      setAppliedDiscount(40)
-      setPromoSuccess('Complimentary priority shipping code applied!')
-    } else {
-      setPromoError('Invalid promotion code. Try "ATELIER10" for 10% off.')
-    }
-  }
-
-  const shippingFee = totalPrice >= 500 ? 0 : 40
-  const finalTotal = Math.max(0, totalPrice - appliedDiscount + shippingFee)
+  if (!hydrated) return <main className="below-header min-h-[75vh]" aria-busy="true" />
 
   if (items.length === 0) {
     return (
-      <main className="min-h-[75vh] flex items-center justify-center px-4 py-16 bg-[#faf9fc]">
+      <main className="below-header min-h-[75vh] flex items-center justify-center px-4 pb-16 bg-[#faf9fc]">
         <div className="w-full max-w-md p-8 sm:p-10 bg-white border border-[#424a70]/12 rounded-3xl text-center shadow-sm">
           <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-[#424a70]/10 flex items-center justify-center text-[#424a70]">
             <ShoppingBag className="w-8 h-8" />
           </div>
-          <h1 className="text-xl sm:text-2xl font-serif font-medium text-[#1c2033] mb-2">
-            Your Tableware Bag is Empty
-          </h1>
-          <p className="text-xs text-[#687194] leading-relaxed mb-6">
-            Discover our permanent stoneware forms, reduction glazes, and hand-blown crystal glass before proceeding.
-          </p>
-          <UnifortButton
-            href="/collection"
-            variant="primary"
-            size="md"
-            fullWidth
-            icon={<ArrowRight className="w-4 h-4" />}
-            iconPosition="end"
-          >
-            Explore Tableware Collection
+          <h1 className="text-xl sm:text-2xl font-serif font-medium text-[#1c2033] mb-2">Your bag is empty</h1>
+          <p className="text-xs text-[#687194] leading-relaxed mb-6">Discover our stoneware and glass, or design your own piece in the 3D studio.</p>
+          <UnifortButton href="/collection" variant="primary" size="md" fullWidth icon={<ArrowRight className="w-4 h-4" />} iconPosition="end">
+            Explore the collection
           </UnifortButton>
         </div>
       </main>
@@ -81,227 +117,95 @@ export function CartPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#faf9fc] text-[#1c2033] py-12 px-4 sm:px-6 lg:px-8">
+    <main className="below-header min-h-screen bg-[#faf9fc] text-[#1c2033] pb-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-6xl mx-auto">
-        {/* Header Navigation */}
         <div className="mb-8">
-          <Link
-            href="/collection"
-            className="inline-flex items-center gap-1.5 text-xs text-[#687194] hover:text-[#1c2033] transition-colors mb-2"
-          >
+          <Link href="/collection" className="inline-flex items-center gap-1.5 text-xs text-[#687194] hover:text-[#1c2033] mb-2">
             <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Continue Shopping</span>
+            <span>Continue shopping</span>
           </Link>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
-              <h1 className="text-2xl sm:text-3xl font-serif font-medium text-[#1c2033]">
-                Your Shopping Bag
-              </h1>
+              <h1 className="text-2xl sm:text-3xl font-serif font-medium">Your shopping bag</h1>
               <p className="text-xs text-[#687194] mt-0.5">
-                {totalCount} {totalCount === 1 ? 'consignment item' : 'consignment items'} ready for dispatch
+                {totalCount} {totalCount === 1 ? 'item' : 'items'}
               </p>
             </div>
-            <button
-              onClick={clearBag}
-              className="text-xs text-red-500/80 hover:text-red-600 transition-colors self-start sm:self-auto"
-            >
-              Clear Entire Bag
+            <button onClick={clearBag} className="text-xs text-red-600/80 hover:text-red-700 self-start sm:self-auto">
+              Clear bag
             </button>
           </div>
         </div>
 
-        {/* Content Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          {/* Items List */}
-          <div className="lg:col-span-8 flex flex-col gap-4">
-            {items.map(({ product, quantity }) => {
-              const itemPrice = parsePrice(product.price)
-              const itemTotal = itemPrice * quantity
-
+          <ul className="lg:col-span-8 flex flex-col gap-4">
+            {items.map(({ key, product, quantity, customDesignId, designTitle }) => {
+              const line = quote?.items.find((l) => l.productId === product.id && (l.customDesignId || '') === (customDesignId || ''))
+              const unit = line?.unitPrice ?? product.rawPrice
+              const hasProblem = problemProductId === product.id
               return (
-                <div
-                  key={product.name}
-                  className="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-4 sm:p-5 bg-white border border-[rgba(66,74,112,0.14)] rounded-2xl shadow-xs transition-all hover:border-[rgba(66,74,112,0.3)]"
+                <li
+                  key={key}
+                  className={`flex gap-4 p-4 bg-white border rounded-2xl ${hasProblem ? 'border-red-400' : 'border-[#424a70]/12'}`}
                 >
-                  {/* Thumbnail */}
-                  <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden bg-[#faf9fc] border border-[rgba(66,74,112,0.1)] shrink-0">
-                    <Image
-                      src={product.image}
-                      alt={product.name}
-                      fill
-                      sizes="100px"
-                      className="object-cover"
-                    />
+                  <div className="relative w-24 h-24 rounded-xl overflow-hidden bg-[#f3f2f7] shrink-0">
+                    <Image src={product.image} alt={product.name} fill sizes="96px" className="object-cover" />
                   </div>
-
-                  {/* Details */}
-                  <div className="flex-1 min-w-0">
-                    <span className="text-[10px] uppercase tracking-wider text-[#424a70] font-semibold">
-                      {product.category}
-                    </span>
-                    <h3 className="text-sm font-semibold text-[#1c2033] truncate mt-0.5">
-                      {product.name}
-                    </h3>
-                    <p className="text-xs text-[#687194] mt-0.5">
-                      {product.type}
-                    </p>
-                    <p className="text-xs font-mono font-medium text-[#424a70] mt-1 sm:hidden">
-                      ₹{itemPrice.toLocaleString()} each
-                    </p>
-                  </div>
-
-                  {/* Quantity & Actions */}
-                  <div className="flex items-center justify-between sm:justify-end gap-6 w-full sm:w-auto mt-2 sm:mt-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-[rgba(66,74,112,0.08)]">
-                    {/* Stepper */}
-                    <div className="flex items-center border border-[rgba(66,74,112,0.2)] rounded-lg bg-[#faf9fc]">
-                      <button
-                        onClick={() => updateQuantity(product.name, -1)}
-                        className="p-1.5 text-[#424a70] hover:text-[#1c2033] hover:bg-slate-200/50 rounded-l-lg transition-colors"
-                        aria-label="Decrease quantity"
-                      >
-                        <Minus className="w-3.5 h-3.5" />
-                      </button>
-                      <span className="px-3 text-xs font-mono font-semibold text-[#1c2033]">
-                        {quantity}
-                      </span>
-                      <button
-                        onClick={() => updateQuantity(product.name, 1)}
-                        className="p-1.5 text-[#424a70] hover:text-[#1c2033] hover:bg-slate-200/50 rounded-r-lg transition-colors"
-                        aria-label="Increase quantity"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
+                  <div className="flex-1 min-w-0 flex flex-col justify-between">
+                    <div className="flex justify-between gap-3">
+                      <div className="min-w-0">
+                        <h2 className="text-sm font-medium truncate">
+                          {product.slug ? <Link href={customDesignId ? `/customize?design=${customDesignId}` : `/collection/${product.slug}`}>{product.name}</Link> : product.name}
+                        </h2>
+                        <p className="text-xs text-[#687194]">{designTitle ? `Custom design: ${designTitle}` : product.type}</p>
+                        {line && line.stock < quantity && <p className="text-xs text-red-600 mt-1">Only {line.stock} left in stock</p>}
+                      </div>
+                      <button onClick={() => removeFromBag(key)} className="p-1.5 text-[#687194] hover:text-red-600" aria-label={`Remove ${product.name}`}>
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
-
-                    {/* Total Price */}
-                    <div className="text-right min-w-[70px]">
-                      <strong className="text-sm font-serif font-bold text-[#1c2033] block">
-                        ₹{itemTotal.toLocaleString()}
-                      </strong>
-                      <span className="hidden sm:inline text-[11px] text-[#687194]">
-                        ₹{itemPrice.toLocaleString()} ea
-                      </span>
+                    <div className="flex items-center justify-between mt-3">
+                      <div className="flex items-center border border-[#424a70]/20 rounded-lg" role="group" aria-label={`Quantity of ${product.name}`}>
+                        <button onClick={() => updateQuantity(key, -1)} className="p-1.5" aria-label="Decrease quantity">
+                          <Minus className="w-3.5 h-3.5" />
+                        </button>
+                        <span className="px-3 text-xs font-mono" aria-live="polite">
+                          {quantity}
+                        </span>
+                        <button onClick={() => updateQuantity(key, 1)} className="p-1.5 disabled:opacity-40" aria-label="Increase quantity" disabled={quantity >= MAX_LINE_QTY}>
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      <div className="text-right">
+                        <strong className="text-sm">{formatINR(unit * quantity)}</strong>
+                        {quantity > 1 && <span className="block text-[11px] text-[#687194]">{formatINR(unit)} each</span>}
+                      </div>
                     </div>
-
-                    {/* Remove */}
-                    <button
-                      onClick={() => removeFromBag(product.name)}
-                      className="p-2 text-[#687194] hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      title="Remove from bag"
-                      aria-label={`Remove ${product.name}`}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
                   </div>
-                </div>
+                </li>
               )
             })}
+          </ul>
 
-            {/* Atelier Assurance Badge */}
-            <div className="p-4 bg-white/70 border border-[rgba(66,74,112,0.12)] rounded-2xl flex flex-col sm:flex-row items-center gap-4 text-xs text-[#687194]">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>Damage-Free Transit Guarantee</span>
-              </div>
-              <div className="hidden sm:block w-px h-4 bg-[rgba(66,74,112,0.15)]" />
-              <div className="flex items-center gap-2">
-                <Truck className="w-4 h-4 text-[#424a70] shrink-0" />
-                <span>Complimentary Delivery Above ₹500</span>
-              </div>
-              <div className="hidden sm:block w-px h-4 bg-[rgba(66,74,112,0.15)]" />
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
-                <span>100% Food-Safe Stoneware & Glass</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Order Summary Card */}
-          <div className="lg:col-span-4">
-            <div className="p-6 bg-white border border-[rgba(66,74,112,0.15)] rounded-2xl shadow-sm sticky top-24">
-              <h2 className="text-base font-serif font-semibold text-[#1c2033] mb-4 pb-3 border-b border-[rgba(66,74,112,0.1)]">
-                Order Summary
-              </h2>
-
-              <div className="space-y-3 text-xs mb-6">
-                <div className="flex justify-between text-[#687194]">
-                  <span>Items Subtotal</span>
-                  <span className="font-mono text-[#1c2033]">₹{totalPrice.toLocaleString()}</span>
-                </div>
-
-                {appliedDiscount > 0 && (
-                  <div className="flex justify-between text-emerald-600">
-                    <span>Atelier Patron Discount</span>
-                    <span className="font-mono">-₹{appliedDiscount.toLocaleString()}</span>
-                  </div>
-                )}
-
-                <div className="flex justify-between text-[#687194]">
-                  <span>Archival Insured Delivery</span>
-                  <span className="font-medium text-emerald-600">
-                    {shippingFee === 0 ? 'Complimentary' : `₹${shippingFee}`}
-                  </span>
-                </div>
-
-                <div className="flex justify-between text-[#687194]">
-                  <span>Estimated GST (12%)</span>
-                  <span className="font-mono text-[#687194]">Included in price</span>
-                </div>
-
-                <div className="border-t border-[rgba(66,74,112,0.12)] pt-3 flex justify-between items-baseline">
-                  <span className="text-sm font-semibold text-[#1c2033]">Total Amount</span>
-                  <strong className="text-xl font-serif font-bold text-[#424a70]">
-                    ₹{finalTotal.toLocaleString()}
-                  </strong>
-                </div>
-              </div>
-
-              {/* Promo Code Form */}
-              <form onSubmit={handleApplyPromo} className="mb-6">
-                <label className="text-[11px] font-semibold text-[#1c2033] uppercase tracking-wider block mb-1.5 flex items-center gap-1.5">
-                  <Tag className="w-3.5 h-3.5 text-[#424a70]" />
-                  Promotion or Gift Code
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="e.g. ATELIER10"
-                    value={promoCode}
-                    onChange={(e) => setPromoCode(e.target.value)}
-                    className="flex-1 px-3 py-2 text-xs bg-white border border-[rgba(66,74,112,0.18)] rounded-xl focus:outline-none focus:border-[#424a70]"
-                  />
-                  <UnifortButton type="submit" variant="outline" size="sm">
-                    Apply
-                  </UnifortButton>
-                </div>
-                {promoError && (
-                  <p className="text-[11px] text-red-500 mt-1">{promoError}</p>
-                )}
-                {promoSuccess && (
-                  <p className="text-[11px] text-emerald-600 mt-1 flex items-center gap-1">
-                    <Check className="w-3 h-3" />
-                    <span>{promoSuccess}</span>
-                  </p>
-                )}
-              </form>
-
-              {/* Action Button */}
-              <UnifortButton
-                onClick={() => router.push('/checkout')}
-                variant="primary"
-                size="md"
-                fullWidth
-                icon={<ArrowRight className="w-4 h-4" />}
-                iconPosition="end"
-              >
-                Proceed to Checkout (₹{finalTotal.toLocaleString()})
-              </UnifortButton>
-
-              <p className="text-[11px] text-center text-[#687194] mt-3">
-                Secure checkout powered by Razorpay. All major UPI, cards & netbanking supported.
+          <aside className="lg:col-span-4 p-6 bg-white border border-[#424a70]/12 rounded-2xl flex flex-col gap-4 lg:sticky lg:top-24">
+            <h2 className="text-sm font-semibold">Order summary</h2>
+            <CouponField code={coupon} setCode={setCoupon} />
+            {quote?.couponMessage && (
+              <p className="text-xs text-red-600" role="alert">
+                {quote.couponMessage}
               </p>
-            </div>
-          </div>
+            )}
+            {quote?.coupon && <p className="text-xs text-emerald-700">Code {quote.coupon.code} applied{quote.coupon.description ? ` — ${quote.coupon.description}` : ''}</p>}
+            {error && (
+              <p className="text-xs text-red-600" role="alert">
+                {error}
+              </p>
+            )}
+            <SummaryRows quote={quote} loading={loading} />
+            <UnifortButton href="/checkout" variant="primary" fullWidth disabled={!quote || !!error} icon={<ArrowRight className="w-4 h-4" />} iconPosition="end">
+              Proceed to checkout
+            </UnifortButton>
+          </aside>
         </div>
       </div>
     </main>

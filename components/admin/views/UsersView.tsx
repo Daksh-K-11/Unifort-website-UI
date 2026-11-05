@@ -14,7 +14,10 @@ import {
 } from 'lucide-react'
 import { useAdminAuth } from '../admin-auth-context'
 import { AdminUser, UserRole } from '../admin-types'
-import { api } from '../../../lib/api-client'
+import { api } from '@/lib/api-client'
+import { notify, useDebounced, confirmAction } from '../admin-ui'
+import { AdminPagination } from '../AdminPagination'
+import { passwordProblem, PASSWORD_HINT } from '@/components/customer/AuthForms'
 import { GlassDropdown, GlassDropdownOption } from '../../ui/GlassDropdown'
 
 const provisionRoleOptions: GlassDropdownOption[] = [
@@ -31,6 +34,11 @@ export function UsersView() {
   const [roleFilter, setRoleFilter] = useState<string>('ALL')
   const [searchQuery, setSearchQuery] = useState('')
   const [isProvisionModalOpen, setIsProvisionModalOpen] = useState(false)
+  const debouncedSearch = useDebounced(searchQuery)
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(20)
+  const [meta, setMeta] = useState({ total: 0, totalPages: 1 })
+  const [provisionError, setProvisionError] = useState<string | null>(null)
 
   // User Deletion Confirmation Modal
   const [userToDelete, setUserToDelete] = useState<AdminUser | null>(null)
@@ -47,7 +55,12 @@ export function UsersView() {
     if (!canManageUsers) return
     setLoading(true)
     try {
-      const res = await api.get('/admin/users', {}, true)
+      const q = new URLSearchParams({ page: String(page), limit: String(limit) })
+      if (roleFilter !== 'ALL') q.set('role', roleFilter)
+      if (debouncedSearch.trim()) q.set('search', debouncedSearch.trim())
+      const res = await api.get(`/admin/users?${q}`)
+      if (!res.success) notify(res)
+      if (res.meta) setMeta({ total: res.meta.total ?? 0, totalPages: res.meta.totalPages ?? 1 })
       if (res.success && res.data) {
         const raw = Array.isArray(res.data) ? res.data : (res.data.users || [])
         const mapped: AdminUser[] = raw.map((u: any) => ({
@@ -57,6 +70,9 @@ export function UsersView() {
           role: u.role as UserRole,
           isActive: u.isActive !== false,
           phone: u.phone,
+          orderCount: u._count?.orders ?? 0,
+          lastLoginAt: u.lastLoginAt,
+          emailVerified: !!u.emailVerifiedAt,
           createdAt: u.createdAt,
           updatedAt: u.updatedAt,
         }))
@@ -67,7 +83,9 @@ export function UsersView() {
     } finally {
       setLoading(false)
     }
-  }, [canManageUsers])
+  }, [canManageUsers, page, limit, roleFilter, debouncedSearch])
+
+  useEffect(() => setPage(1), [roleFilter, debouncedSearch])
 
   useEffect(() => {
     fetchUsers()
@@ -90,6 +108,12 @@ export function UsersView() {
   const handleProvisionUser = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!name || !email || !password) return
+    const problem = passwordProblem(password)
+    if (problem) {
+      setProvisionError(problem)
+      return
+    }
+    setProvisionError(null)
 
     const parts = name.trim().split(' ')
     const firstName = parts[0] || 'Atelier'
@@ -103,8 +127,13 @@ export function UsersView() {
       role,
     }
 
-    const res = await api.post('/admin/users', payload, {}, true)
-    if (res.success && res.data) {
+    const res = await api.post('/admin/users', payload)
+    if (!res.success) {
+      setProvisionError(res.errors?.[0]?.message || res.message || 'Could not create the account.')
+      return
+    }
+    notify(res, `Account created for ${payload.email}`)
+    if (res.data) {
       const u = res.data
       const newUser: AdminUser = {
         id: u.id,
@@ -124,13 +153,20 @@ export function UsersView() {
   }
 
   const handleToggleActive = async (id: string, current: boolean) => {
-    setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, isActive: !current } : u)))
-    await api.patch(`/admin/users/${id}/status`, { isActive: !current }, {}, true)
+    if (current && !confirmAction('Deactivate this account? The user will be signed out everywhere.')) return
+    const res = await api.patch(`/admin/users/${id}/status`, { isActive: !current })
+    if (notify(res)) setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, isActive: !current } : u)))
   }
 
   const handleChangeRole = async (id: string, newRole: UserRole) => {
-    setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, role: newRole } : u)))
-    await api.patch(`/admin/users/${id}/role`, { role: newRole }, {}, true)
+    if (!confirmAction(`Change this account's role to ${newRole}? They will need to sign in again.`)) return
+    const res = await api.patch(`/admin/users/${id}/role`, { role: newRole })
+    if (notify(res)) setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, role: newRole } : u)))
+  }
+
+  const handleSendReset = async (u: AdminUser) => {
+    if (!confirmAction(`Email a password reset link to ${u.email}?`)) return
+    notify(await api.post(`/admin/users/${u.id}/password-reset`))
   }
 
   const handleConfirmDelete = async () => {
@@ -138,7 +174,7 @@ export function UsersView() {
     setIsDeleting(true)
     setDeleteError(null)
     try {
-      const res = await api.delete(`/admin/users/${userToDelete.id}`, {}, true)
+      const res = await api.delete(`/admin/users/${userToDelete.id}`)
       if (res.success) {
         setUsers((prev) => prev.filter((u) => u.id !== userToDelete.id))
         setUserToDelete(null)
@@ -152,23 +188,17 @@ export function UsersView() {
     }
   }
 
-  const filteredUsers = users.filter((u) => {
-    const matchesRole = roleFilter === 'ALL' || u.role === roleFilter
-    const matchesSearch =
-      u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.email.toLowerCase().includes(searchQuery.toLowerCase())
-    return matchesRole && matchesSearch
-  })
+  const filteredUsers = users
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-serif tracking-tight adm-text-primary font-medium">
-            User & Staff Access Control (RBAC)
+            Users & staff
           </h2>
           <p className="text-xs adm-text-muted mt-0.5">
-            Cryptographic access tiers across ADMIN, STAFF, and CUSTOMER roles.
+            Manage roles and access. Deleted accounts are anonymised; their orders are kept.
           </p>
         </div>
 
@@ -256,9 +286,15 @@ export function UsersView() {
                 return (
                   <tr key={user.id} className="adm-table-hover transition-colors">
                     <td className="py-3.5 px-4 font-medium adm-text-primary">{user.name}</td>
-                    <td className="py-3.5 px-4 font-mono adm-text-muted">{user.email}</td>
+                    <td className="py-3.5 px-4 font-mono adm-text-muted">
+                      {user.email}
+                      <div className="font-sans text-[10px]">{(user as any).orderCount ?? 0} orders · {(user as any).lastLoginAt ? `last sign-in ${new Date((user as any).lastLoginAt).toLocaleDateString('en-IN')}` : 'never signed in'}</div>
+                    </td>
                     <td className="py-3.5 px-4">
                       <select
+                        aria-label={`Role of ${user.email}`}
+                        disabled={!!isSelf}
+                        title={isSelf ? 'You cannot change your own role' : undefined}
                         value={user.role}
                         onChange={(e) => handleChangeRole(user.id, e.target.value as UserRole)}
                         className={`adm-select adm-select-sm font-mono font-medium border focus:outline-none ${
@@ -278,6 +314,8 @@ export function UsersView() {
                       <button
                         type="button"
                         onClick={() => handleToggleActive(user.id, user.isActive)}
+                        disabled={!!isSelf}
+                        title={isSelf ? 'You cannot deactivate your own account' : undefined}
                         className={`inline-flex items-center text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full font-medium border cursor-pointer ${
                           user.isActive
                             ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
@@ -287,7 +325,10 @@ export function UsersView() {
                         {user.isActive ? 'Active' : 'Suspended'}
                       </button>
                     </td>
-                    <td className="py-3.5 px-4 text-right">
+                    <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                      <button type="button" onClick={() => handleSendReset(user)} className="px-2 py-1 mr-1 rounded-lg border adm-border text-[11px]">
+                        Reset password
+                      </button>
                       {isSelf ? (
                         <span
                           className="p-1.5 rounded-lg text-slate-300 dark:text-slate-600 cursor-not-allowed inline-flex items-center"
@@ -303,7 +344,8 @@ export function UsersView() {
                             setDeleteError(null)
                           }}
                           className="p-1.5 rounded-lg text-red-500 hover:text-red-700 dark:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
-                          title={`Permanently Delete ${user.name}`}
+                          title={`Delete ${user.name}`}
+                          aria-label={`Delete ${user.name}`}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -315,6 +357,7 @@ export function UsersView() {
             </tbody>
           </table>
         </div>
+        <AdminPagination page={page} limit={limit} total={meta.total} totalPages={meta.totalPages} onPageChange={setPage} onLimitChange={(l) => { setLimit(l); setPage(1) }} itemName="users" />
       </div>
       )}
 
@@ -468,7 +511,8 @@ export function UsersView() {
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="At least 8 characters"
+                  placeholder={PASSWORD_HINT}
+                  minLength={8}
                   className="w-full px-3.5 py-2 adm-input border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
                   required
                 />
@@ -480,6 +524,12 @@ export function UsersView() {
                 value={role}
                 onChange={(val) => setRole(val as UserRole)}
               />
+
+              {provisionError && (
+                <p role="alert" className="text-xs text-red-500">
+                  {provisionError}
+                </p>
+              )}
 
               <div className="pt-2 flex items-center justify-end gap-2">
                 <button
