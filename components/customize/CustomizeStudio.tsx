@@ -115,6 +115,8 @@ export function CustomizeStudio() {
   const [title, setTitle] = useState(
     initialProduct ? `${initialProduct.name} Custom` : 'Bespoke Custom'
   )
+  // Free-text production instructions for the workshop.
+  const [instructions, setInstructions] = useState('')
 
   // UI state
   const [viewMode, setViewMode] = useState<'3d' | '2d'>('3d')
@@ -241,6 +243,7 @@ export function CustomizeStudio() {
     setActiveSurfaceId(initialSurface)
     setElements([])
     setBackgroundPattern(undefined)
+    setInstructions('')
     setTitle(`${newProduct.name} Custom`)
     setSelectedElementId(null)
     historyRef.current = []
@@ -366,13 +369,13 @@ export function CustomizeStudio() {
   }
 
   /** Persist the current design on the server. Returns the saved design or null on failure. */
-  const persistDesign = async (designTitle: string, snapshot?: string): Promise<ServerDesign | null> => {
+  const persistDesign = async (designTitle: string, snapshot?: string, notes: string = instructions): Promise<ServerDesign | null> => {
     if (!product) return null
     setSaving(true)
-    const state: DesignState = { productId: product.id, title: designTitle, colors, finish, activeSurfaceId, elements, backgroundPattern }
+    const state: DesignState = { productId: product.id, title: designTitle, colors, finish, activeSurfaceId, elements, backgroundPattern, instructions: notes }
     let productionSpec: Record<string, unknown> | undefined
     try {
-      productionSpec = JSON.parse(generateProductionSpecJson(product, state))
+      productionSpec = JSON.parse(generateProductionSpecJson(product, state, notes))
     } catch {
       productionSpec = undefined
     }
@@ -389,10 +392,11 @@ export function CustomizeStudio() {
     return res.data
   }
 
-  const handleConfirmSave = async (savedTitle: string) => {
+  const handleConfirmSave = async (savedTitle: string, savedInstructions: string) => {
     if (!product) return
     setTitle(savedTitle)
-    const saved = await persistDesign(savedTitle, currentSnapshot || undefined)
+    setInstructions(savedInstructions)
+    const saved = await persistDesign(savedTitle, currentSnapshot || undefined, savedInstructions)
     if (saved) toast.success(`Saved "${saved.title}"`)
   }
 
@@ -411,6 +415,7 @@ export function CustomizeStudio() {
     setActiveSurfaceId(saved.state.activeSurfaceId)
     setElements(saved.state.elements)
     setBackgroundPattern(saved.state.backgroundPattern)
+    setInstructions(saved.customerInstructions ?? saved.state.instructions ?? '')
     setTitle(saved.title)
     setSelectedElementId(saved.state.elements[0]?.id || null)
     historyRef.current = []
@@ -446,8 +451,9 @@ export function CustomizeStudio() {
         activeSurfaceId,
         elements,
         backgroundPattern,
+        instructions,
       }
-      const json = generateProductionSpecJson(product, state)
+      const json = generateProductionSpecJson(product, state, instructions)
       const blob = new Blob([json], { type: 'application/json' })
       downloadBlob(blob, `${product.id}-production-spec.json`)
       setToastMessage('Downloaded production specification JSON')
@@ -807,6 +813,8 @@ export function CustomizeStudio() {
               onDeleteElement={handleDeleteElement}
               onDuplicateElement={handleDuplicateElement}
               onAddToBag={handleAddToBag}
+              instructions={instructions}
+              onInstructionsChange={setInstructions}
               className="w-full h-full"
             />
           )}
@@ -832,6 +840,7 @@ export function CustomizeStudio() {
       <SaveDesignDialog
         isOpen={saveDialogOpen}
         defaultTitle={title}
+        defaultInstructions={instructions}
         thumbnailUrl={currentSnapshot}
         onClose={() => setSaveDialogOpen(false)}
         onSave={handleConfirmSave}

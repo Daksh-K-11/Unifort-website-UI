@@ -1,12 +1,14 @@
 'use client'
 
-import React from 'react'
+import React, { useState } from 'react'
 import { CustomizableProduct, DesignElement, FinishType, PrintableSurface } from '@/lib/customize/types'
 import { calculateCustomPrice } from '@/lib/customize/products'
 import {
   Copy,
+  ChevronDown,
   Info,
   Lock,
+  MessageSquareText,
   RotateCcw,
   ShoppingBag,
   Trash2,
@@ -25,6 +27,8 @@ interface PropertiesPanelProps {
   onDeleteElement: (id: string) => void
   onDuplicateElement: (id: string) => void
   onAddToBag: () => void
+  instructions: string
+  onInstructionsChange: (value: string) => void
   className?: string
 }
 
@@ -39,12 +43,21 @@ export function PropertiesPanel({
   onDeleteElement,
   onDuplicateElement,
   onAddToBag,
+  instructions,
+  onInstructionsChange,
   className = '',
 }: PropertiesPanelProps) {
+  const [notesOpen, setNotesOpen] = useState(instructions.length > 0)
+  const showNotes = notesOpen
   const selectedElement = elements.find((e) => e.id === selectedElementId)
   const currentPrice = calculateCustomPrice(product, { finish, elements })
   const finishObj = product.supportedFinishes.find((f) => f.id === finish)
   const surfaceCount = new Set(elements.map((e) => e.surfaceId)).size
+  // Effective print resolution of a selected uploaded image at its current size.
+  const imageDpi =
+    selectedElement?.type === 'image' && selectedElement.pxWidth && selectedElement.surfaceId === surface.id
+      ? Math.round(selectedElement.pxWidth / (((selectedElement.width / 100) * surface.printWidthMm * selectedElement.scale) / 25.4))
+      : null
 
   const alignElement = (type: 'left' | 'centerX' | 'right' | 'top' | 'centerY' | 'bottom') => {
     if (!selectedElement) return
@@ -254,6 +267,33 @@ export function PropertiesPanel({
               </div>
             </div>
 
+            {imageDpi !== null && (
+              <p
+                className={`text-[11px] rounded-lg px-2.5 py-2 ${imageDpi < 150 ? 'bg-amber-50 text-amber-900' : 'bg-emerald-50 text-emerald-800'}`}
+                role="status"
+              >
+                {imageDpi < 150
+                  ? `Print quality: low (${imageDpi} DPI). Make it smaller or upload a larger image for a sharp print.`
+                  : `Print quality: good (${imageDpi} DPI).`}
+              </p>
+            )}
+
+            {/* Per-layer note for the workshop */}
+            <div>
+              <label htmlFor="layer-note" className="text-[11px] font-semibold text-[#1c2033] block mb-1">
+                Note for this layer <span className="font-normal text-[#687194]">(optional)</span>
+              </label>
+              <input
+                id="layer-note"
+                type="text"
+                value={selectedElement.note || ''}
+                maxLength={300}
+                onChange={(e) => onUpdateElement(selectedElement.id, { note: e.target.value })}
+                placeholder="e.g. Gold lustre, raised glaze"
+                className="w-full px-3 py-2 text-xs bg-white border border-[rgba(66,74,112,0.2)] rounded-lg focus:outline-none focus:border-[#424a70]"
+              />
+            </div>
+
             <div className="flex items-center gap-2 pt-2 border-t border-[rgba(66,74,112,0.12)]">
               <UnifortButton
                 variant="outline"
@@ -307,7 +347,7 @@ export function PropertiesPanel({
               </div>
               <div className="flex justify-between text-xs text-[#1c2033]">
                 <span className="text-[#687194]">Resolution</span>
-                <span className="font-mono text-emerald-700 font-semibold">300 DPI Ultra-Fine</span>
+                <span className="font-mono font-medium">{surface.dpi} DPI</span>
               </div>
             </div>
 
@@ -325,8 +365,44 @@ export function PropertiesPanel({
         )}
       </div>
 
-      {/* BOTTOM SECTION: PRICING BREAKDOWN & ADD TO BAG */}
+      {/* BOTTOM SECTION: INSTRUCTIONS, PRICING & ADD TO BAG */}
       <div className="pt-4 border-t border-[rgba(66,74,112,0.14)] mt-4">
+        <div className="mb-3.5 rounded-2xl border border-[rgba(66,74,112,0.14)] bg-white/80">
+          <button
+            type="button"
+            onClick={() => setNotesOpen((o) => !o)}
+            aria-expanded={showNotes}
+            aria-controls="design-instructions"
+            className="w-full flex items-center justify-between gap-2 px-3 py-2.5 text-left"
+          >
+            <span className="flex items-center gap-2 text-xs font-semibold text-[#1c2033]">
+              <MessageSquareText className="w-3.5 h-3.5 text-[#424a70]" aria-hidden />
+              Instructions for our artisans
+              {instructions.length > 0 && <span className="rounded-full bg-[#424a70] px-1.5 py-0.5 text-[9px] font-medium text-white">Added</span>}
+            </span>
+            <ChevronDown className={`w-3.5 h-3.5 text-[#687194] transition-transform ${showNotes ? 'rotate-180' : ''}`} aria-hidden />
+          </button>
+          {showNotes && (
+            <div id="design-instructions" className="px-3 pb-3">
+              <label htmlFor="design-instructions-input" className="sr-only">
+                Instructions for our artisans
+              </label>
+              <textarea
+                id="design-instructions-input"
+                value={instructions}
+                onChange={(e) => onInstructionsChange(e.target.value.slice(0, 2000))}
+                rows={3}
+                placeholder="e.g. Match the blue to our logo (Pantone 2945C). Gift for a wedding on 12 Dec."
+                className="w-full px-3 py-2 text-xs bg-white border border-[rgba(66,74,112,0.2)] rounded-lg focus:outline-none focus:border-[#424a70] resize-y"
+              />
+              <p className="flex justify-between text-[10px] text-[#687194]">
+                <span>Sent with your order to our workshop.</span>
+                <span>{instructions.length}/2000</span>
+              </p>
+            </div>
+          )}
+        </div>
+
         <div className="flex flex-col gap-1.5 mb-3.5 text-xs">
           <div className="flex justify-between text-[#687194]">
             <span>Base Piece</span>

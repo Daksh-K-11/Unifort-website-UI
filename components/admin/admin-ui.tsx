@@ -40,13 +40,16 @@ export function AdminModal({
   onClose: () => void
   children: React.ReactNode
   footer?: React.ReactNode
-  wide?: boolean
+  wide?: boolean | 'xl'
 }) {
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!open) return
     const prev = document.activeElement as HTMLElement | null
     const onKey = (e: KeyboardEvent) => {
+      // Only the top-most dialog reacts when modals are stacked.
+      const dialogs = document.querySelectorAll('[role="dialog"]')
+      if (dialogs.length && dialogs[dialogs.length - 1] !== ref.current) return
       if (e.key === 'Escape') onClose()
       if (e.key === 'Tab' && ref.current) {
         const f = ref.current.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
@@ -72,13 +75,13 @@ export function AdminModal({
 
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
       <div
         ref={ref}
         role="dialog"
         aria-modal="true"
         aria-labelledby="adm-modal-title"
-        className={`w-full ${wide ? 'max-w-3xl' : 'max-w-lg'} max-h-[90vh] overflow-y-auto adm-card border adm-border rounded-2xl shadow-2xl`}
+        className={`w-full ${wide === 'xl' ? 'max-w-6xl' : wide ? 'max-w-3xl' : 'max-w-lg'} max-h-[90vh] overflow-y-auto adm-card border adm-border rounded-2xl shadow-2xl`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b adm-border">
@@ -89,7 +92,7 @@ export function AdminModal({
             <X className="w-4 h-4" />
           </button>
         </div>
-        <div className="p-5 space-y-4">{children}</div>
+        <div className="p-4 sm:p-5 space-y-4">{children}</div>
         {footer && <div className="px-5 py-4 border-t adm-border flex justify-end gap-2">{footer}</div>}
       </div>
     </div>

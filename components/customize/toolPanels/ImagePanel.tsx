@@ -87,6 +87,8 @@ export function ImagePanel({
               src,
               name: file.name,
               aspectRatio: aspect,
+              pxWidth: img.naturalWidth || img.width,
+              pxHeight: img.naturalHeight || img.height,
             })
           } else {
             // Add directly to canvas and auto-select
@@ -104,6 +106,8 @@ export function ImagePanel({
               src,
               name: file.name,
               aspectRatio: aspect,
+              pxWidth: img.naturalWidth || img.width,
+              pxHeight: img.naturalHeight || img.height,
             })
           }
         }

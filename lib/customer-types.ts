@@ -53,6 +53,8 @@ export interface CustomerOrderItem {
   totalPrice: number
   quantity: number
   bespokeDesignId?: string
+  /** Instructions the customer sent with this custom piece. */
+  customerInstructions?: string
 }
 
 export interface CustomerOrder {
@@ -145,6 +147,7 @@ export interface CustomerSavedDesign {
   estimatedPrice: number
   previewUrl?: string
   craftsmanNotes?: string
+  customerInstructions?: string
   elementsCount: number
   state?: any
   createdAt: string

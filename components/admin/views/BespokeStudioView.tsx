@@ -21,6 +21,7 @@ import { CustomDesignItem, CustomDesignStatus } from '../admin-types'
 import { api, mediaUrl } from '@/lib/api-client'
 import { notify, useDebounced } from '../admin-ui'
 import { AdminPagination } from '../AdminPagination'
+import { DesignWorkOrder } from '../design/DesignWorkOrder'
 
 const modelTypeOptions = [
   { value: 'ALL', label: 'All Silhouettes' },
@@ -181,6 +182,8 @@ export function BespokeStudioView() {
           status: d.status as CustomDesignStatus,
           finish: d.finish || d.state?.finish || 'matte',
           designState: d.state || d.designState,
+          customerInstructions: d.customerInstructions || undefined,
+          orders: (d.orderItems || []).map((oi: any) => oi.order).filter(Boolean),
           snapshotUrl: d.thumbnailUrl ? mediaUrl(d.thumbnailUrl) : d.product?.image ? mediaUrl(d.product.image) : undefined,
           productionNotes: d.productionNotes,
           craftsmanNotes: d.craftsmanNotes,
@@ -250,7 +253,6 @@ export function BespokeStudioView() {
     setDesigns((prev) => prev.map((d) => (d.id === selectedDesign.id ? updated : d)))
     setSelectedDesign(updated)
     setCraftsmanNoteInput('')
-    setIsInspectModalOpen(false)
   }
 
   // Active filter count
@@ -651,6 +653,16 @@ export function BespokeStudioView() {
                           <span className="text-[10px] text-slate-400 font-mono">
                             {design.product?.name || 'Artisan Tableware'}
                           </span>
+                          <span className="mt-1 flex flex-wrap gap-1">
+                            {design.customerInstructions && (
+                              <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-900">Has instructions</span>
+                            )}
+                            {design.orders?.map((o) => (
+                              <span key={o.id} className="rounded-full bg-[#424a70]/10 px-1.5 py-0.5 text-[10px] font-mono text-[#424a70] dark:text-indigo-200">
+                                {o.orderNumber}
+                              </span>
+                            ))}
+                          </span>
                         </div>
                       </td>
                       <td className="py-3.5 px-4">
@@ -726,141 +738,81 @@ export function BespokeStudioView() {
         </div>
       )}
 
-      {/* Inspector & Status Advancement Modal */}
-      {isInspectModalOpen && selectedDesign && (
-        <div className="fixed inset-0 adm-modal-overlay backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="w-full max-w-lg adm-modal-bg border rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="p-5 border-b adm-border flex items-center justify-between">
+      {/* Design work order + production status */}
+      <DesignWorkOrder
+        open={isInspectModalOpen && !!selectedDesign}
+        onClose={() => setIsInspectModalOpen(false)}
+        design={
+          selectedDesign
+            ? {
+                title: selectedDesign.title,
+                state: selectedDesign.designState as any,
+                productRef: selectedDesign.product?.slug || selectedDesign.productId,
+                productName: selectedDesign.product?.name,
+                modelType: selectedDesign.product?.modelType || selectedDesign.modelType,
+                instructions: selectedDesign.customerInstructions,
+                thumbnailUrl: selectedDesign.snapshotUrl,
+                customerName: selectedDesign.user?.name || 'Guest',
+                customerEmail: selectedDesign.user?.email,
+                orderNumbers: selectedDesign.orders?.map((o) => o.orderNumber),
+                statusLabel: selectedDesign.status.replace(/_/g, ' ').toLowerCase(),
+                source: 'live',
+              }
+            : null
+        }
+        aside={
+          selectedDesign && (
+            <form onSubmit={handleSaveWorkshopUpdate} className="rounded-xl border adm-border p-3.5 space-y-3">
+              <p className="text-[10px] uppercase tracking-wider adm-text-muted">Production status</p>
               <div>
-                <span className="text-[10px] uppercase tracking-wider text-purple-600 dark:text-purple-300 font-semibold">
-                  Atelier Inspector
-                </span>
-                <h3 className="text-base font-serif font-medium adm-text-primary">
-                  {selectedDesign.title}
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsInspectModalOpen(false)}
-                className="p-1.5 rounded-lg adm-text-muted hover:adm-text-primary"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveWorkshopUpdate} className="p-5 space-y-4 overflow-y-auto flex-1">
-              {/* 3D Piece Visual Preview */}
-              <div className="relative w-full h-52 rounded-2xl overflow-hidden border adm-border bg-black/5 dark:bg-white/5 flex items-center justify-center shadow-inner group">
-                <img
-                  src={getDesignPreviewUrl(selectedDesign)}
-                  alt={selectedDesign.title}
-                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement
-                    if (!target.src.includes('unifort-tumbler-light.jpg')) {
-                      target.src = '/products/unifort-tumbler-light.jpg'
-                    }
-                  }}
-                />
-                <div className="absolute top-3 left-3 flex items-center gap-1.5">
-                  <span className="px-2.5 py-1 rounded-lg text-[10px] font-semibold tracking-wider uppercase bg-black/60 text-white backdrop-blur-md shadow-xs">
-                    {selectedDesign.product?.modelType || selectedDesign.modelType || '3D Model'}
-                  </span>
-                  <span className="px-2.5 py-1 rounded-lg text-[10px] font-semibold tracking-wider uppercase bg-[#424a70]/90 text-white backdrop-blur-md shadow-xs">
-                    Glaze: {selectedDesign.finish}
-                  </span>
-                </div>
-                <div className="absolute bottom-3 right-3">
-                  <span className="px-2.5 py-1 rounded-lg text-[10px] font-semibold tracking-wider uppercase bg-emerald-700/90 text-white backdrop-blur-md flex items-center gap-1 shadow-xs">
-                    <CheckCircle2 className="w-3 h-3" /> 300 DPI Pre-flight
-                  </span>
-                </div>
-              </div>
-
-              {/* Piece Specification Summary */}
-              <div className="grid grid-cols-2 gap-3 p-3.5 adm-card-subtle border adm-border rounded-xl text-xs">
-                <div>
-                  <span className="adm-text-muted block text-[10px] uppercase">Silhouette</span>
-                  <span className="adm-text-primary font-medium capitalize">
-                    {selectedDesign.product?.modelType || selectedDesign.modelType || 'Model'}
-                  </span>
-                </div>
-                <div>
-                  <span className="adm-text-muted block text-[10px] uppercase">Selected Finish</span>
-                  <span className="adm-text-primary font-medium capitalize">{selectedDesign.finish}</span>
-                </div>
-                <div>
-                  <span className="adm-text-muted block text-[10px] uppercase">Print Standards</span>
-                  <span className="text-emerald-600 dark:text-emerald-400 font-medium">300 DPI Verified</span>
-                </div>
-                <div>
-                  <span className="adm-text-muted block text-[10px] uppercase">Patron Account</span>
-                  <span className="adm-text-primary font-medium truncate block">
-                    {selectedDesign.user?.name || 'Guest User'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Status Advancement Selector */}
-              <div>
-                <label className="block text-[11px] uppercase tracking-wider adm-text-muted font-medium mb-1.5">
-                  Update Workshop Status
+                <label htmlFor="design-stage" className="block text-xs adm-text-primary font-medium mb-1">
+                  Stage
                 </label>
                 <select
+                  id="design-stage"
                   value={statusUpdateInput}
                   onChange={(e) => setStatusUpdateInput(e.target.value as CustomDesignStatus)}
                   className="adm-select w-full px-3 py-2 border rounded-xl text-xs focus:outline-none focus:border-[#424a70]"
                 >
-                  <option value="SUBMITTED">SUBMITTED (Awaiting initial review)</option>
-                  <option value="IN_REVIEW">IN_REVIEW (Verifying resolution & alignment)</option>
-                  <option value="APPROVED">APPROVED (Ready for wheel / glaze prep)</option>
-                  <option value="IN_PRODUCTION">IN_PRODUCTION (In Kiln Reduction Firing)</option>
-                  <option value="COMPLETED">COMPLETED (Packaged & Ready for Dispatch)</option>
-                  <option value="REJECTED">REJECTED (Specs not viable)</option>
+                  <option value="SAVED">Saved by customer (not ordered)</option>
+                  <option value="SUBMITTED">Submitted — awaiting review</option>
+                  <option value="IN_REVIEW">In review — checking artwork & placement</option>
+                  <option value="APPROVED">Approved — ready for production</option>
+                  <option value="IN_PRODUCTION">In production</option>
+                  <option value="COMPLETED">Completed — ready to dispatch</option>
+                  <option value="REJECTED">Rejected — needs changes from customer</option>
                 </select>
               </div>
-
-              {/* Craftsman Kiln Notes (Strictly non-italic) */}
-              <div>
-                {selectedDesign?.craftsmanNotes && (
-                  <pre className="mb-2 p-3 rounded-xl border adm-border text-[11px] whitespace-pre-wrap font-sans adm-text-secondary max-h-40 overflow-y-auto">
+              {selectedDesign.craftsmanNotes && (
+                <div>
+                  <p className="text-xs adm-text-primary font-medium mb-1">Workshop notes</p>
+                  <pre className="p-2.5 rounded-lg border adm-border text-[11px] whitespace-pre-wrap font-sans adm-text-secondary max-h-36 overflow-y-auto">
                     {selectedDesign.craftsmanNotes}
                   </pre>
-                )}
-                <label htmlFor="craft-note" className="block text-[11px] uppercase tracking-wider adm-text-muted font-medium mb-1.5">
-                  Add a production note
+                </div>
+              )}
+              <div>
+                <label htmlFor="craft-note" className="block text-xs adm-text-primary font-medium mb-1">
+                  Add a workshop note <span className="font-normal adm-text-muted">(staff only)</span>
                 </label>
                 <textarea
                   id="craft-note"
                   maxLength={2000}
                   value={craftsmanNoteInput}
                   onChange={(e) => setCraftsmanNoteInput(e.target.value)}
-                  placeholder="e.g. Stoneware reduction fired at 1280°C. Verified satin finish and 300 DPI metallic decal alignment."
-                  rows={3}
-                  className="w-full px-3.5 py-2.5 adm-input border rounded-xl text-xs not-italic focus:outline-none focus:border-[#424a70] resize-none"
+                  placeholder="e.g. Artwork checked, decal printed at 300 DPI."
+                  rows={2}
+                  className="w-full px-3 py-2 adm-input border rounded-xl text-xs focus:outline-none focus:border-[#424a70] resize-y"
                 />
               </div>
-
-              <div className="pt-2 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsInspectModalOpen(false)}
-                  className="px-3.5 py-2 rounded-xl text-xs adm-text-muted hover:adm-text-primary"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2.5 adm-btn-primary rounded-xl text-xs flex items-center gap-1.5 cursor-pointer"
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>Update Piece State</span>
-                </button>
-              </div>
+              <button type="submit" className="w-full px-4 py-2.5 adm-btn-primary rounded-xl text-xs inline-flex items-center justify-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5" aria-hidden />
+                Save status
+              </button>
             </form>
-          </div>
-        </div>
-      )}
+          )
+        }
+      />
     </div>
   )
 }

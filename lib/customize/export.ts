@@ -1,5 +1,7 @@
 import { CustomizableProduct, DesignElement, DesignState, PrintableSurface } from './types'
 import { GRAPHIC_ASSETS } from './graphics'
+import { buildDesignSpec } from './spec'
+import { ensureFontsLoaded } from './fonts'
 
 /**
  * Render a high-resolution print-ready 2D canvas of a printable surface (e.g. 2400x2400px for 300DPI)
@@ -10,13 +12,18 @@ export async function generatePrintReadyDataUrl(
   surface: PrintableSurface,
   elements: DesignElement[],
   includeBackground = false,
-  bgColor = '#ffffff'
+  bgColor = '#ffffff',
+  /** For on-screen previews: fit the longest edge to this many pixels instead of print DPI. */
+  maxEdgePx?: number
 ): Promise<string> {
+  await ensureFontsLoaded(elements.filter((e) => e.surfaceId === surface.id))
   const canvas = document.createElement('canvas')
-  // Calculate pixel dimensions for print (300 DPI)
-  // 1 mm = 0.03937 inches. 300 DPI => 1 mm ~ 11.81 pixels
-  const widthPx = Math.max(1200, Math.round(surface.printWidthMm * (surface.dpi / 25.4)))
-  const heightPx = Math.max(1200, Math.round(surface.printHeightMm * (surface.dpi / 25.4)))
+  // Print pixel dimensions at the surface DPI (300 DPI => 1 mm ~ 11.81 px), keeping the aspect ratio.
+  let pxPerMm = surface.dpi / 25.4
+  if (maxEdgePx) pxPerMm = maxEdgePx / Math.max(surface.printWidthMm, surface.printHeightMm)
+  else pxPerMm = Math.max(pxPerMm, 1200 / Math.max(surface.printWidthMm, surface.printHeightMm))
+  const widthPx = Math.round(surface.printWidthMm * pxPerMm)
+  const heightPx = Math.round(surface.printHeightMm * pxPerMm)
 
   canvas.width = widthPx
   canvas.height = heightPx
@@ -97,68 +104,52 @@ export function generateProductionSpecJson(
   state: DesignState,
   customerNotes = ''
 ): string {
+  const d = buildDesignSpec(product, state, customerNotes)
   const spec = {
     studio: 'UNIFORT Customization Atelier',
-    specVersion: '2.0',
+    specVersion: '3.0',
     timestamp: new Date().toISOString(),
+    units: { length: 'mm', origin: 'top-left of each print surface', rotation: 'degrees clockwise' },
     product: {
       id: product.id,
       name: product.name,
       category: product.category,
       modelType: product.modelType,
       selectedColors: state.colors,
+      colorNames: Object.fromEntries(d.colors.map((c) => [c.region, c.name])),
       selectedFinish: state.finish,
+      finishName: d.finish.name,
     },
-    printableSurfaces: product.surfaces.map((s) => ({
+    backgroundPattern: d.backgroundPattern,
+    printableSurfaces: d.surfaces.map((s) => ({
       surfaceId: s.id,
       name: s.name,
-      physicalDimensionsMm: {
-        width: s.printWidthMm,
-        height: s.printHeightMm,
-      },
+      physicalDimensionsMm: { width: s.widthMm, height: s.heightMm },
       targetDpi: s.dpi,
-      elements: state.elements
-        .filter((e) => e.surfaceId === s.id)
-        .map((e) => ({
-          id: e.id,
-          type: e.type,
-          xPercent: e.x,
-          yPercent: e.y,
-          scale: e.scale,
-          rotationDegrees: e.rotation,
-          opacity: e.opacity,
-          zIndex: e.zIndex,
-          textProperties:
-            e.type === 'text'
-              ? {
-                  content: e.text,
-                  fontFamily: e.fontFamily,
-                  fontSizePt: e.fontSize,
-                  fontColor: e.fontColor,
-                  fontWeight: e.fontWeight,
-                  fontStyle: e.fontStyle,
-                  textAlign: e.textAlign,
-                  letterSpacing: e.letterSpacing,
-                }
-              : undefined,
-          graphicProperties:
-            e.type === 'graphic'
-              ? {
-                  assetId: e.src,
-                  name: e.name,
-                  tintColor: e.tintColor,
-                }
-              : undefined,
-          imageProperties:
-            e.type === 'image'
-              ? {
-                  name: e.name,
-                  aspectRatio: e.aspectRatio,
-                }
-              : undefined,
-        })),
+      isWraparound: s.isWraparound,
+      elements: s.layers.map((l) => ({
+        layer: l.index,
+        id: l.id,
+        type: l.type,
+        xPercent: l.xPercent,
+        yPercent: l.yPercent,
+        centerMm: { x: l.centerXmm, y: l.centerYmm },
+        boxMm: { left: l.leftMm, top: l.topMm, width: l.widthMm, height: l.heightMm },
+        scale: l.scale,
+        rotationDegrees: l.rotation,
+        opacityPercent: l.opacity,
+        flipX: l.flipX,
+        flipY: l.flipY,
+        zIndex: l.zIndex,
+        textProperties: l.text,
+        graphicProperties: l.graphic,
+        imageProperties: l.image,
+        note: l.note,
+        warnings: l.warnings.length ? l.warnings : undefined,
+      })),
     })),
-    customerNotes,
+    warnings: d.warnings,
+    customerNotes: d.instructions,
   }
 
   return JSON.stringify(spec, null, 2)

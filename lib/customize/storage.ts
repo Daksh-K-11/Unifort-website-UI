@@ -13,6 +13,7 @@ export interface ServerDesign extends SavedDesign {
   editable: boolean
   estimatedPrice: number
   dbProductId: string | null
+  customerInstructions: string
 }
 
 const toSaved = (d: any): ServerDesign => ({
@@ -20,7 +21,8 @@ const toSaved = (d: any): ServerDesign => ({
   title: d.title,
   productId: d.state?.productId || d.product?.slug || '',
   productName: d.productName,
-  state: d.state,
+  state: { ...d.state, instructions: d.customerInstructions || '' },
+  customerInstructions: d.customerInstructions || '',
   thumbnailUrl: mediaUrl(d.thumbnailUrl || d.product?.image),
   createdAt: d.createdAt,
   updatedAt: d.updatedAt,
@@ -76,6 +78,7 @@ export async function saveDesign(
     title: title.trim().slice(0, 120) || 'My design',
     state: { ...state, title },
     thumbnailUrl,
+    customerInstructions: (state.instructions || '').trim().slice(0, 2000),
     ...(opts.productionSpec && { productionSpec: opts.productionSpec }),
     ...(opts.existingId && { existingId: opts.existingId }),
   })

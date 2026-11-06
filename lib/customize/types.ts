@@ -15,6 +15,8 @@ export interface DesignElement {
   zIndex: number
   flipX?: boolean
   flipY?: boolean
+  /** Customer's note to the workshop about this layer (e.g. "gold lustre"). */
+  note?: string
 
   // Text specific
   text?: string
@@ -32,6 +34,9 @@ export interface DesignElement {
   name?: string
   aspectRatio?: number
   tintColor?: string // for SVG graphics
+  /** Natural pixel size of uploaded artwork, for print-resolution checks. */
+  pxWidth?: number
+  pxHeight?: number
 
   // Pattern specific
   patternType?: string
@@ -114,6 +119,8 @@ export interface DesignState {
     bgColor: string
     opacity: number
   }
+  /** Free-text production instructions from the customer. Sent as customerInstructions. */
+  instructions?: string
 }
 
 export interface SavedDesign {

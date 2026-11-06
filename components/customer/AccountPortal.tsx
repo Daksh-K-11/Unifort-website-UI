@@ -501,6 +501,11 @@ function OrderCard({ order, defaultOpen }: { order: CustomerOrder; defaultOpen: 
                     <span className="text-xs text-[#687194]">
                       Qty {it.quantity} · {formatINR(it.price)} each
                     </span>
+                    {it.customerInstructions && (
+                      <span className="mt-1 block whitespace-pre-wrap break-words rounded-lg bg-white px-2 py-1.5 text-xs text-[#3b4266] ring-1 ring-[#424a70]/10">
+                        <b className="font-semibold">Your instructions:</b> {it.customerInstructions}
+                      </span>
+                    )}
                   </span>
                   <span className="flex flex-col items-end gap-1">
                     <span className="text-sm font-medium">{formatINR(it.totalPrice)}</span>
@@ -639,6 +644,11 @@ function Designs() {
                     {d.productName} · from {formatINR(d.estimatedPrice)}
                   </p>
                   {d.status === 'REJECTED' && <p className="mt-1 text-xs text-rose-700">Our studio asked for changes — open the design to update it.</p>}
+                  {d.customerInstructions && (
+                    <p className="mt-1.5 line-clamp-2 text-xs text-[#3b4266]" title={d.customerInstructions}>
+                      <b className="font-semibold">Instructions:</b> {d.customerInstructions}
+                    </p>
+                  )}
                 </div>
                 <div className="mt-auto flex flex-wrap gap-2">
                   <Link href={`/customize?design=${d.id}`} className={`${btnPrimary} flex-1`}>

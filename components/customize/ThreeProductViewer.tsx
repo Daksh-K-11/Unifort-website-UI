@@ -4,6 +4,7 @@ import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } f
 import * as THREE from 'three'
 import { CustomizableProduct, DesignElement, FinishType, ProductColors } from '@/lib/customize/types'
 import { GRAPHIC_ASSETS } from '@/lib/customize/graphics'
+import { ensureFontsLoaded } from '@/lib/customize/fonts'
 import { Camera, Maximize2, Minus, Move3d, Plus, RefreshCw, RotateCcw } from 'lucide-react'
 
 export interface ThreeProductViewerRef {
@@ -741,6 +742,13 @@ export const ThreeProductViewer = forwardRef<ThreeProductViewerRef, ThreeProduct
     // Re-draw textures when elements change
     useEffect(() => {
       updateCanvasTextures()
+      // Redraw once web fonts used by text layers have loaded.
+      let alive = true
+      ensureFontsLoaded(elements).then(() => alive && updateCanvasTextures())
+      return () => {
+        alive = false
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [elements, colors, finish, backgroundPattern, activeSurfaceId])
 
     // Mouse handlers for 360° rotation

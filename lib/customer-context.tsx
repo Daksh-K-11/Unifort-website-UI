@@ -117,6 +117,7 @@ export function mapBackendOrder(o: any): CustomerOrder {
       totalPrice: Number(it.totalPrice || 0),
       quantity: it.quantity || 1,
       bespokeDesignId: it.customDesignId || undefined,
+      customerInstructions: it.metadata?.customerInstructions || undefined,
     })),
     shippingAddress: {
       fullName: a.recipientName || o.customerName || '',
@@ -162,6 +163,7 @@ export function mapBackendDesign(d: any): CustomerSavedDesign {
     previewUrl: mediaUrl(d.thumbnailUrl || d.product?.image),
     craftsmanNotes: d.craftsmanNotes || undefined,
     elementsCount: Array.isArray(state.elements) ? state.elements.length : 0,
+    customerInstructions: d.customerInstructions || undefined,
     state,
     createdAt: d.createdAt,
     updatedAt: d.updatedAt,
