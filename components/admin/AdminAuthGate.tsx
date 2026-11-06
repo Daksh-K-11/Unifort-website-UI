@@ -2,10 +2,12 @@
 
 import React, { useState } from 'react'
 import Link from 'next/link'
-import { Shield, Lock, ArrowRight, AlertCircle, Loader2 } from 'lucide-react'
+import { Shield, ArrowRight, AlertCircle, Loader2 } from 'lucide-react'
 import { useAdminAuth } from './admin-auth-context'
 import { useAdminTheme } from './admin-theme-context'
 import { AdminThemeToggle } from './AdminThemeToggle'
+import { PasswordInput } from '@/components/ui/PasswordInput'
+import { DemoLogins } from '@/components/ui/DemoLogins'
 
 export function AdminAuthGate() {
   const { login, isForbidden, logout } = useAdminAuth()
@@ -92,8 +94,7 @@ export function AdminAuthGate() {
                 Passphrase
               </label>
               <div className="relative">
-                <input
-                  type="password"
+                <PasswordInput
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••••••"
@@ -102,7 +103,6 @@ export function AdminAuthGate() {
                   className="w-full px-3.5 py-2.5 adm-input border rounded-xl text-sm focus:outline-none focus:border-[#424a70] transition-colors pr-10"
                   required
                 />
-                <Lock className="w-4 h-4 adm-text-muted absolute right-3.5 top-1/2 -translate-y-1/2" />
               </div>
             </div>
 
@@ -143,6 +143,15 @@ export function AdminAuthGate() {
               )}
             </button>
           </form>
+          <DemoLogins
+            tone="admin"
+            className="mt-4 adm-text-primary"
+            onUse={(e, p) => {
+              setEmail(e)
+              setPassword(p)
+              setError('')
+            }}
+          />
 
           {/* Secure RBAC Note */}
           <div className="mt-6 pt-5 border-t adm-border text-center">

@@ -32,6 +32,7 @@ import type { CustomerAddress, CustomerOrder, CustomerSavedDesign } from '@/lib/
 import { api, errorMessage, formatINR } from '@/lib/api-client'
 import { passwordProblem, PASSWORD_HINT } from './AuthForms'
 import { OrderProgress, StatusBadge, statusHelp } from './order-ui'
+import { PasswordInput } from '@/components/ui/PasswordInput'
 
 type View = 'overview' | 'orders' | 'designs' | 'messages' | 'profile'
 
@@ -853,20 +854,20 @@ function Profile() {
             <label htmlFor="pw-current" className={labelCls}>
               Current password
             </label>
-            <input id="pw-current" type="password" required value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" className={inputCls} />
+            <PasswordInput id="pw-current" required value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" className={inputCls} />
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label htmlFor="pw-new" className={labelCls}>
                 New password
               </label>
-              <input id="pw-new" type="password" required value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" className={inputCls} />
+              <PasswordInput id="pw-new" required value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" className={inputCls} />
             </div>
             <div>
               <label htmlFor="pw-confirm" className={labelCls}>
                 Confirm new password
               </label>
-              <input id="pw-confirm" type="password" required value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" className={inputCls} />
+              <PasswordInput id="pw-confirm" required value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" className={inputCls} />
             </div>
           </div>
           <p className="text-xs text-[#687194]">{PASSWORD_HINT}</p>

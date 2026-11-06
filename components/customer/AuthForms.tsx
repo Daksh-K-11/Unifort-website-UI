@@ -6,6 +6,8 @@ import { useEffect, useRef, useState } from 'react'
 import { ArrowUpRight } from 'lucide-react'
 import { postLoginPath, useCustomer } from '@/lib/customer-context'
 import { api, errorMessage } from '@/lib/api-client'
+import { PasswordInput } from '@/components/ui/PasswordInput'
+import { DemoLogins } from '@/components/ui/DemoLogins'
 
 /** Only allow same-site relative redirects after sign-in. */
 export function safeNext(next: string | null, fallback = '/account') {
@@ -95,13 +97,21 @@ export function LoginForm() {
         </label>
         <label htmlFor="login-password">
           Password
-          <input id="login-password" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+          <PasswordInput id="login-password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
         </label>
         <FormError message={error} />
         <button className="button" type="submit" disabled={busy || !email || !password}>
           {busy ? 'Signing in…' : 'Sign in'} <ArrowUpRight />
         </button>
       </form>
+      <DemoLogins
+        className="mt-4"
+        onUse={(e, p) => {
+          setEmail(e)
+          setPassword(p)
+          setError('')
+        }}
+      />
       <p className="muted" style={{ marginTop: 16, fontSize: 13 }}>
         <Link href="/forgot-password">Forgot your password?</Link>
         <br />
@@ -177,7 +187,7 @@ export function RegisterForm() {
         </label>
         <label htmlFor="reg-password">
           Password
-          <input id="reg-password" type="password" autoComplete="new-password" value={form.password} onChange={set('password')} aria-invalid={!!errors.password} aria-describedby="reg-password-err reg-pw-hint" />
+          <PasswordInput id="reg-password" autoComplete="new-password" value={form.password} onChange={set('password')} aria-invalid={!!errors.password} aria-describedby="reg-password-err reg-pw-hint" />
           <span id="reg-pw-hint" className="muted" style={{ fontSize: 11 }}>
             {PASSWORD_HINT}
           </span>
@@ -185,7 +195,7 @@ export function RegisterForm() {
         </label>
         <label htmlFor="reg-confirm">
           Confirm password
-          <input id="reg-confirm" type="password" autoComplete="new-password" value={form.confirm} onChange={set('confirm')} aria-invalid={!!errors.confirm} aria-describedby="reg-confirm-err" />
+          <PasswordInput id="reg-confirm" autoComplete="new-password" value={form.confirm} onChange={set('confirm')} aria-invalid={!!errors.confirm} aria-describedby="reg-confirm-err" />
           {fieldErr('confirm')}
         </label>
         <label htmlFor="reg-accept" style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12, textTransform: 'none', letterSpacing: 0 }}>
@@ -293,14 +303,14 @@ export function ResetPasswordForm() {
         <form onSubmit={submit}>
           <label htmlFor="reset-pw">
             New password
-            <input id="reset-pw" type="password" autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} />
+            <PasswordInput id="reset-pw" autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} />
             <span className="muted" style={{ fontSize: 11 }}>
               {PASSWORD_HINT}
             </span>
           </label>
           <label htmlFor="reset-confirm">
             Confirm new password
-            <input id="reset-confirm" type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+            <PasswordInput id="reset-confirm" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
           </label>
           <FormError message={error} />
           <button className="button" type="submit" disabled={busy}>

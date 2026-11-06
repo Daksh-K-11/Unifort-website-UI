@@ -19,6 +19,7 @@ import { notify, useDebounced, confirmAction } from '../admin-ui'
 import { AdminPagination } from '../AdminPagination'
 import { passwordProblem, PASSWORD_HINT } from '@/components/customer/AuthForms'
 import { GlassDropdown, GlassDropdownOption } from '../../ui/GlassDropdown'
+import { PasswordInput } from '@/components/ui/PasswordInput'
 
 const provisionRoleOptions: GlassDropdownOption[] = [
   { value: 'STAFF', label: 'STAFF (Workshop, Inquiries & Fulfillment)', description: 'Can manage catalog, orders, and inquiries' },
@@ -507,8 +508,7 @@ export function UsersView() {
                 <label className="block text-[11px] uppercase tracking-wider adm-text-muted font-medium mb-1.5">
                   Initial Passphrase *
                 </label>
-                <input
-                  type="password"
+                <PasswordInput
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder={PASSWORD_HINT}

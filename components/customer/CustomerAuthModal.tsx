@@ -6,6 +6,8 @@ import { passwordProblem, PASSWORD_HINT } from './AuthForms'
 import { X, Lock, Mail, User, Phone, ArrowRight, Loader2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { isStaffRole, useCustomer } from '@/lib/customer-context'
+import { PasswordInput } from '@/components/ui/PasswordInput'
+import { DemoLogins } from '@/components/ui/DemoLogins'
 
 export function CustomerAuthModal() {
   const { authModalOpen, closeAuthModal, authReason, login, register } = useCustomer()
@@ -78,7 +80,7 @@ export function CustomerAuthModal() {
       aria-labelledby="auth-modal-title"
     >
       <div
-        className="w-full max-w-md bg-[#faf9fc] text-[#1c2033] border border-[#424a70]/15 rounded-3xl shadow-2xl p-6 sm:p-8 relative overflow-hidden"
+        className="w-full max-w-md bg-[#faf9fc] text-[#1c2033] border border-[#424a70]/15 rounded-3xl shadow-2xl p-6 sm:p-8 relative max-h-[calc(100dvh-2rem)] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Close Button */}
@@ -213,9 +215,8 @@ export function CustomerAuthModal() {
               Password *
             </label>
             <div className="relative">
-              <input
+              <PasswordInput
                     id="auth-password"
-                type="password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -246,6 +247,16 @@ export function CustomerAuthModal() {
           </button>
           {tab === 'register' && <p className="text-[10px] text-[#424a70]/70">{PASSWORD_HINT}</p>}
         </form>
+
+        <DemoLogins
+          className="mt-4"
+          onUse={(e, p) => {
+            setTab('login')
+            setEmail(e)
+            setPassword(p)
+            setError('')
+          }}
+        />
 
         <div className="mt-5 pt-4 border-t border-[#424a70]/10 text-[11px] text-[#424a70]/70 text-center">
           <Link href="/forgot-password" onClick={() => closeAuthModal()} className="hover:underline">
