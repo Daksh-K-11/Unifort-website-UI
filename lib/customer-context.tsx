@@ -1,6 +1,6 @@
 'use client'
 
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import {
   CustomerUser,
   CustomerOrder,
@@ -20,6 +20,16 @@ interface CustomerContextType {
   authLoading: boolean
   authModalOpen: 'login' | 'register' | null
   setAuthModalOpen: (type: 'login' | 'register' | null) => void
+  /** Why the sign-in dialog was opened (e.g. "Sign in to add this to your bag"). */
+  authReason: string | null
+  /**
+   * Gate an action behind an account. Signed in: returns true (run the action yourself).
+   * Otherwise opens the sign-in dialog with the reason, returns false, and runs
+   * `onSignedIn` once the person signs in or creates an account.
+   */
+  requireAuth: (reason: string, onSignedIn?: () => void) => boolean
+  /** Close the sign-in dialog without signing in (drops any queued action). */
+  closeAuthModal: () => void
   login: (email: string, password: string) => Promise<Result & { role?: CustomerUser['role'] }>
   register: (name: string, email: string, password: string, phone?: string) => Promise<Result>
   logout: () => Promise<void>
@@ -188,7 +198,24 @@ function mapBackendInquiry(inq: any): CustomerInquiry {
 export function CustomerProvider({ children }: { children: React.ReactNode }) {
   const [customer, setCustomer] = useState<CustomerUser | null>(null)
   const [authLoading, setAuthLoading] = useState(true)
-  const [authModalOpen, setAuthModalOpen] = useState<'login' | 'register' | null>(null)
+  const [authModalOpen, setAuthModalOpenState] = useState<'login' | 'register' | null>(null)
+  const [authReason, setAuthReason] = useState<string | null>(null)
+  const pendingAction = useRef<(() => void) | null>(null)
+  const setAuthModalOpen = useCallback((type: 'login' | 'register' | null) => {
+    setAuthModalOpenState(type)
+    if (!type) setAuthReason(null)
+  }, [])
+  /** Dialog dismissed without signing in: forget the queued action. */
+  const closeAuthModal = useCallback(() => {
+    pendingAction.current = null
+    setAuthModalOpen(null)
+  }, [setAuthModalOpen])
+  const runPendingAction = useCallback((role?: string | null) => {
+    const action = pendingAction.current
+    pendingAction.current = null
+    // Staff are sent to the dashboard instead of continuing a shopping action.
+    if (action && !(role === 'ADMIN' || role === 'STAFF')) setTimeout(action, 0)
+  }, [])
   const [orders, setOrders] = useState<CustomerOrder[]>([])
   const [ordersLoading, setOrdersLoading] = useState(false)
   const [savedDesigns, setSavedDesigns] = useState<CustomerSavedDesign[]>([])
@@ -277,6 +304,7 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
     setCustomer(user)
     setAuthModalOpen(null)
     loadAccountData()
+    runPendingAction(user.role)
     return { success: true, role: user.role }
   }
 
@@ -294,11 +322,24 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
       res.errors?.forEach((e) => e.field && (errs[e.field] = e.message))
       return { success: false, message: errorMessage(res, 'Could not create your account.'), errors: errs }
     }
-    setCustomer(mapUser(res.data.user))
+    const user = mapUser(res.data.user)
+    setCustomer(user)
     setAuthModalOpen(null)
     loadAccountData()
+    runPendingAction(user.role)
     return { success: true, message: res.message }
   }
+
+  const requireAuth = useCallback(
+    (reason: string, onSignedIn?: () => void) => {
+      if (customer) return true
+      pendingAction.current = onSignedIn || null
+      setAuthReason(reason)
+      setAuthModalOpenState('login')
+      return false
+    },
+    [customer]
+  )
 
   const logout = async () => {
     await api.post('/auth/logout')
@@ -431,6 +472,9 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
         authLoading,
         authModalOpen,
         setAuthModalOpen,
+        authReason,
+        requireAuth,
+        closeAuthModal,
         login,
         register,
         logout,

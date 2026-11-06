@@ -8,12 +8,14 @@ import { ChevronLeft, Minus, Plus } from 'lucide-react'
 import { MAX_LINE_QTY, useBag } from '@/lib/bag-context'
 import type { StorefrontProduct } from '@/lib/product-mapper'
 import { formatINR } from '@/lib/api-client'
+import { useCustomer } from '@/lib/customer-context'
 import { UnifortButton } from '@/components/ui/UnifortButton'
 import { ProductReviewsSection } from '@/components/reviews/ProductReviewsSection'
 
 export function ProductDetail({ product }: { product: StorefrontProduct }) {
   const router = useRouter()
   const { addToBag, setIsBagOpen, items } = useBag()
+  const { requireAuth } = useCustomer()
   const images = [product.image, ...(product.gallery || []).filter((g) => g !== product.image)]
   const [activeImage, setActiveImage] = useState(0)
   const [qty, setQty] = useState(1)
@@ -25,6 +27,12 @@ export function ProductDetail({ product }: { product: StorefrontProduct }) {
 
   const add = (thenCheckout: boolean) => {
     if (qty < 1 || qty > maxQty) return
+    const reason = thenCheckout ? 'Sign in or create an account to buy this piece.' : 'Sign in or create an account to add this to your bag.'
+    if (!requireAuth(reason, () => addNow(thenCheckout))) return
+    addNow(thenCheckout)
+  }
+
+  const addNow = (thenCheckout: boolean) => {
     addToBag(
       {
         id: product.id,

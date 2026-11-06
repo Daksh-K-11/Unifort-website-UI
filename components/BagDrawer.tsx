@@ -5,10 +5,12 @@ import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { ArrowUpRight, Minus, Plus, ShoppingBag, Trash2, X } from 'lucide-react'
 import { parsePrice, useBag } from '@/lib/bag-context'
+import { useCustomer } from '@/lib/customer-context'
 
 export function BagDrawer() {
   const { items, isBagOpen, setIsBagOpen, updateQuantity, removeFromBag, clearBag, totalPrice, totalCount } = useBag()
   const router = useRouter()
+  const { requireAuth } = useCustomer()
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -36,6 +38,7 @@ export function BagDrawer() {
   const handleOrder = () => {
     if (items.length === 0) return
     setIsBagOpen(false)
+    if (!requireAuth('Sign in or create an account to place your order.', () => router.push('/checkout'))) return
     router.push('/checkout')
   }
 

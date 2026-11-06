@@ -178,6 +178,40 @@ export function CheckoutPage() {
 
   if (!hydrated || authLoading) return <main className="below-header min-h-[75vh]" aria-busy="true" />
 
+  // Orders are placed from an account so customers can track, cancel and review them.
+  if (!isLoggedIn) {
+    return (
+      <main className="below-header min-h-[75vh] flex items-center justify-center px-4 pb-16 bg-[#faf9fc] text-[#1c2033]">
+        <div className="w-full max-w-md p-6 sm:p-8 bg-white border border-[#424a70]/12 rounded-3xl text-center">
+          <Lock className="w-8 h-8 mx-auto mb-3 text-[#424a70]" aria-hidden />
+          <h1 className="text-xl font-serif mb-2">Sign in to check out</h1>
+          <p className="text-sm text-[#687194] mb-6">
+            You need an account to place an order. It lets you track delivery, see your custom designs and get help with your order. Your bag is kept.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-2.5">
+            <button
+              type="button"
+              onClick={() => setAuthModalOpen('login')}
+              className="flex-1 px-4 py-3 rounded-xl bg-[#424a70] hover:bg-[#4f5987] text-white text-sm font-medium"
+            >
+              Sign in
+            </button>
+            <button
+              type="button"
+              onClick={() => setAuthModalOpen('register')}
+              className="flex-1 px-4 py-3 rounded-xl border border-[#424a70]/30 text-[#424a70] hover:bg-[#424a70]/5 text-sm font-medium"
+            >
+              Create account
+            </button>
+          </div>
+          <Link href="/cart" className="inline-block mt-5 text-xs text-[#687194] hover:text-[#1c2033] underline">
+            Back to bag
+          </Link>
+        </div>
+      </main>
+    )
+  }
+
   if (items.length === 0 && !submitting) {
     return (
       <main className="below-header min-h-[75vh] flex items-center justify-center px-4 pb-16 bg-[#faf9fc]">
@@ -230,11 +264,6 @@ export function CheckoutPage() {
                 <h2 id="co-contact" className="text-sm font-semibold">
                   Contact
                 </h2>
-                {!isLoggedIn && (
-                  <button type="button" className="text-xs text-[#424a70] underline" onClick={() => setAuthModalOpen('login')}>
-                    Sign in for faster checkout
-                  </button>
-                )}
               </div>
               {input('email', 'Email', { type: 'email', autoComplete: 'email', readOnly: isLoggedIn })}
               {input('phone', 'Mobile number', { type: 'tel', autoComplete: 'tel', placeholder: '98765 43210' })}

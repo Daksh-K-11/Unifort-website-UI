@@ -57,7 +57,7 @@ type ToolTab = 'colors' | 'text' | 'image' | 'graphic' | 'pattern' | 'templates'
 export function CustomizeStudio() {
   const { addToBag, setIsBagOpen, setToastMessage } = useBag()
   const { customizableItems } = useProducts()
-  const { savedDesigns, refreshSavedDesigns } = useCustomer()
+  const { savedDesigns, refreshSavedDesigns, requireAuth } = useCustomer()
   const searchParams = useSearchParams()
 
   // Read URL params: if user came from a specific product card, auto-select it; otherwise start at Catalog!
@@ -360,6 +360,12 @@ export function CustomizeStudio() {
 
   // Save Design
   const handleOpenSaveDialog = () => {
+    // Anyone can design; saving needs an account. The draft stays in this browser meanwhile.
+    if (!requireAuth('Sign in or create an account to save your design.', openSaveDialog)) return
+    openSaveDialog()
+  }
+
+  const openSaveDialog = () => {
     let snap = ''
     if (viewerRef.current) {
       snap = viewerRef.current.captureSnapshot()
@@ -461,7 +467,13 @@ export function CustomizeStudio() {
   }
 
   // Cart / Bag Integration
-  const handleAddToBag = async () => {
+  const handleAddToBag = () => {
+    if (!product || saving) return
+    if (!requireAuth('Sign in or create an account to add your design to the bag.', () => void addDesignToBag())) return
+    void addDesignToBag()
+  }
+
+  const addDesignToBag = async () => {
     if (!product || saving) return
     if (!product.dbProductId) {
       toast.error('This piece is not available to order right now.')

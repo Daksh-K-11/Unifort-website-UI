@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation'
 import { isStaffRole, useCustomer } from '@/lib/customer-context'
 
 export function CustomerAuthModal() {
-  const { authModalOpen, setAuthModalOpen, login, register } = useCustomer()
+  const { authModalOpen, closeAuthModal, authReason, login, register } = useCustomer()
   const router = useRouter()
   const [tab, setTab] = useState<'login' | 'register'>(authModalOpen || 'login')
   const [email, setEmail] = useState('')
@@ -28,10 +28,10 @@ export function CustomerAuthModal() {
 
   useEffect(() => {
     if (!authModalOpen) return
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setAuthModalOpen(null)
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && closeAuthModal()
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [authModalOpen, setAuthModalOpen])
+  }, [authModalOpen, closeAuthModal])
 
   if (!authModalOpen) return null
 
@@ -72,7 +72,7 @@ export function CustomerAuthModal() {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-md animate-in fade-in duration-200"
-      onClick={() => setAuthModalOpen(null)}
+      onClick={() => closeAuthModal()}
       role="dialog"
       aria-modal="true"
       aria-labelledby="auth-modal-title"
@@ -84,7 +84,7 @@ export function CustomerAuthModal() {
         {/* Close Button */}
         <button
           type="button"
-          onClick={() => setAuthModalOpen(null)}
+          onClick={() => closeAuthModal()}
           className="absolute top-5 right-5 p-2 rounded-full text-[#424a70]/60 hover:text-[#424a70] hover:bg-[#424a70]/5 transition-colors"
           aria-label="Close modal"
         >
@@ -99,7 +99,12 @@ export function CustomerAuthModal() {
           <h2 id="auth-modal-title" className="text-2xl font-serif font-medium text-[#1c2033]">
             {tab === 'login' ? 'Welcome to Your Atelier' : 'Create Patron Account'}
           </h2>
-          <p className="text-xs text-[#424a70]/70 mt-1">
+          {authReason && (
+            <p role="status" className="mt-3 mx-auto max-w-xs rounded-xl bg-[#424a70] text-white px-3 py-2 text-xs font-medium">
+              {authReason}
+            </p>
+          )}
+          <p className="text-xs text-[#424a70]/70 mt-2">
             {tab === 'login'
               ? 'Access your orders, bespoke 3D creations, and studio inquiries.'
               : 'Join our patron collective for commissions, saved 3D glazes, and order tracking.'}
@@ -243,7 +248,7 @@ export function CustomerAuthModal() {
         </form>
 
         <div className="mt-5 pt-4 border-t border-[#424a70]/10 text-[11px] text-[#424a70]/70 text-center">
-          <Link href="/forgot-password" onClick={() => setAuthModalOpen(null)} className="hover:underline">
+          <Link href="/forgot-password" onClick={() => closeAuthModal()} className="hover:underline">
             Forgot your password?
           </Link>
         </div>

@@ -305,7 +305,7 @@ export function BespokeStudioView() {
       </div>
 
       {/* Modern Filter Toolbar */}
-      <div className="adm-card border adm-border rounded-2xl p-4 shadow-sm space-y-3.5">
+      <div className="@container adm-card border adm-border rounded-2xl p-4 shadow-sm space-y-3.5">
         {/* Row 1: Search + Mobile Filter Toggle */}
         <div className="flex items-center gap-2">
           {/* Keyword Search */}
@@ -356,7 +356,7 @@ export function BespokeStudioView() {
         </div>
 
         {/* Dropdowns: Collapsible on Mobile, Grid on Tablet/Desktop */}
-        <div className={`${showMobileFilters ? 'grid' : 'hidden sm:grid'} grid-cols-1 sm:grid-cols-3 gap-2.5`}>
+        <div className={`${showMobileFilters ? 'grid' : 'hidden sm:grid'} grid-cols-1 sm:grid-cols-2 @3xl:grid-cols-3 gap-2.5`}>
           {/* Workshop Status Dropdown */}
           <div className="relative">
             <select
@@ -610,114 +610,94 @@ export function BespokeStudioView() {
           )}
         </div>
       ) : (
-        <div className="adm-card border adm-border rounded-2xl overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
+        <div className="@container adm-card border adm-border rounded-2xl overflow-hidden shadow-sm">
+          {/* Narrow space (phones, or tablets with the sidebar open): one tappable card per design */}
+          <ul className="@3xl:hidden divide-y divide-[var(--adm-card-border)]" aria-label="Custom designs">
+            {designs.map((design) => (
+              <li key={design.id}>
+                <button
+                  type="button"
+                  onClick={() => handleOpenInspect(design)}
+                  className="w-full text-left p-3.5 flex gap-3 adm-table-hover transition-colors"
+                  aria-label={`Open work order for ${design.title}`}
+                >
+                  <DesignThumb src={getDesignPreviewUrl(design)} alt={design.title} size="lg" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="font-semibold text-sm adm-text-primary leading-snug break-words min-w-0">{design.title}</p>
+                      <StageBadge status={design.status} />
+                    </div>
+                    <p className="text-[11px] adm-text-muted mt-0.5 truncate">{designProductLine(design)}</p>
+                    <p className="text-[11px] adm-text-secondary mt-0.5 truncate">
+                      {design.user?.name || 'Guest'}
+                      {design.user?.email && <span className="adm-text-muted"> · {design.user.email}</span>}
+                    </p>
+                    <DesignBadges design={design} />
+                  </div>
+                </button>
+              </li>
+            ))}
+          </ul>
+
+          {/* Wide space: table; less important columns appear as room allows */}
+          <div className="hidden @3xl:block overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b adm-border adm-table-head text-[10px] uppercase tracking-wider adm-text-muted font-medium">
-                  <th className="py-3 px-4 w-14">Preview</th>
-                  <th className="py-3 px-4">Design Title</th>
-                  <th className="py-3 px-4">Silhouette & Glaze</th>
-                  <th className="py-3 px-4">Patron</th>
-                  <th className="py-3 px-4">Stage</th>
-                  <th className="py-3 px-4">Craftsman Notes</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
+                  <th scope="col" className="py-3 px-4">Design</th>
+                  <th scope="col" className="py-3 px-4">Customer</th>
+                  <th scope="col" className="py-3 px-4">Stage</th>
+                  <th scope="col" className="py-3 px-4 hidden @6xl:table-cell">Workshop notes</th>
+                  <th scope="col" className="py-3 px-4 hidden @4xl:table-cell whitespace-nowrap">Updated</th>
+                  <th scope="col" className="py-3 px-4 text-right">
+                    <span className="sr-only">Actions</span>
+                  </th>
                 </tr>
               </thead>
-              <tbody className="divide-y adm-border text-xs adm-text-secondary">
-                {designs.map((design) => {
-                  return (
-                    <tr key={design.id} className="adm-table-hover transition-colors">
-                      <td className="py-2.5 px-4 w-14">
-                        <div
-                          onClick={() => handleOpenInspect(design)}
-                          className="relative w-11 h-11 rounded-xl overflow-hidden border adm-border bg-slate-100 dark:bg-white/5 shrink-0 group cursor-pointer shadow-2xs hover:border-[#424a70] hover:scale-105 transition-all flex items-center justify-center"
-                          title="Inspect piece details"
-                        >
-                          <img
-                            src={getDesignPreviewUrl(design)}
-                            alt={design.title}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              const target = e.target as HTMLImageElement
-                              if (!target.src.includes('unifort-tumbler-light.jpg')) {
-                                target.src = '/products/unifort-tumbler-light.jpg'
-                              }
-                            }}
-                          />
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-4 font-medium adm-text-primary">
-                        <div className="flex flex-col">
-                          <span className="font-semibold">{design.title}</span>
-                          <span className="text-[10px] text-slate-400 font-mono">
-                            {design.product?.name || 'Artisan Tableware'}
-                          </span>
-                          <span className="mt-1 flex flex-wrap gap-1">
-                            {design.customerInstructions && (
-                              <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-900">Has instructions</span>
-                            )}
-                            {design.orders?.map((o) => (
-                              <span key={o.id} className="rounded-full bg-[#424a70]/10 px-1.5 py-0.5 text-[10px] font-mono text-[#424a70] dark:text-indigo-200">
-                                {o.orderNumber}
-                              </span>
-                            ))}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <div className="flex flex-col">
-                          <span className="capitalize font-medium adm-text-primary">
-                            {design.product?.modelType || design.modelType || 'Model'}
-                          </span>
-                          <span className="text-[10px] adm-text-muted uppercase tracking-wider">
-                            Glaze: {design.finish}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <div className="flex flex-col">
-                          <span className="font-medium adm-text-primary">
-                            {design.user?.name || 'Guest Patron'}
-                          </span>
-                          <span className="text-[10px] adm-text-muted font-mono">{design.user?.email || '—'}</span>
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <span
-                          className={`inline-flex items-center gap-1 text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full font-medium border ${
-                            design.status === 'IN_PRODUCTION'
-                              ? 'bg-purple-500/15 border-purple-500/30 text-purple-700 dark:text-purple-300'
-                              : design.status === 'APPROVED'
-                              ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
-                              : design.status === 'COMPLETED'
-                              ? 'bg-teal-500/15 border-teal-500/30 text-teal-700 dark:text-teal-300'
-                              : design.status === 'SUBMITTED'
-                              ? 'bg-blue-500/15 border-blue-500/30 text-blue-700 dark:text-blue-300'
-                              : design.status === 'REJECTED'
-                              ? 'bg-red-500/15 border-red-500/30 text-red-700 dark:text-red-300'
-                              : 'bg-black/5 dark:bg-white/5 adm-border adm-text-muted'
-                          }`}
-                        >
-                          {design.status.replace(/_/g, ' ')}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4 max-w-[220px] truncate adm-text-muted text-[11px] not-italic">
-                        {design.craftsmanNotes || 'No notes added'}
-                      </td>
-                      <td className="py-3.5 px-4 text-right">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenInspect(design)}
-                          className="px-2.5 py-1.5 rounded-lg adm-card adm-border adm-text-secondary hover:adm-text-primary text-xs font-medium inline-flex items-center gap-1.5 transition-colors cursor-pointer"
-                        >
-                          <Eye className="w-3.5 h-3.5 text-[#424a70] dark:text-indigo-400" />
-                          <span>Inspect</span>
+              <tbody className="divide-y divide-[var(--adm-card-border)] text-xs adm-text-secondary">
+                {designs.map((design) => (
+                  <tr key={design.id} className="adm-table-hover transition-colors align-top">
+                    <td className="py-3 px-4 min-w-[260px]">
+                      <div className="flex items-start gap-3">
+                        <button type="button" onClick={() => handleOpenInspect(design)} className="shrink-0 rounded-xl" aria-label={`Open work order for ${design.title}`}>
+                          <DesignThumb src={getDesignPreviewUrl(design)} alt="" />
                         </button>
-                      </td>
-                    </tr>
-                  )
-                })}
+                        <div className="min-w-0">
+                          <p className="font-semibold adm-text-primary leading-snug break-words">{design.title}</p>
+                          <p className="text-[11px] adm-text-muted mt-0.5">{designProductLine(design)}</p>
+                          <DesignBadges design={design} />
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 max-w-[220px]">
+                      <p className="font-medium adm-text-primary truncate">{design.user?.name || 'Guest'}</p>
+                      <p className="text-[11px] adm-text-muted truncate" title={design.user?.email}>
+                        {design.user?.email || '—'}
+                      </p>
+                    </td>
+                    <td className="py-3 px-4 whitespace-nowrap">
+                      <StageBadge status={design.status} />
+                    </td>
+                    <td className="py-3 px-4 hidden @6xl:table-cell max-w-[240px]">
+                      <p className="line-clamp-2 adm-text-muted text-[11px]" title={design.craftsmanNotes || undefined}>
+                        {design.craftsmanNotes || '—'}
+                      </p>
+                    </td>
+                    <td className="py-3 px-4 hidden @4xl:table-cell whitespace-nowrap text-[11px] adm-text-muted">
+                      {formatShortDate(design.updatedAt || design.createdAt)}
+                    </td>
+                    <td className="py-3 px-4 text-right whitespace-nowrap">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenInspect(design)}
+                        className="px-2.5 py-1.5 rounded-lg border adm-border adm-text-secondary hover:adm-text-primary hover:border-[#424a70] text-xs font-medium inline-flex items-center gap-1.5 transition-colors"
+                      >
+                        <Eye className="w-3.5 h-3.5 text-[#424a70] dark:text-indigo-400" aria-hidden />
+                        <span>Open</span>
+                      </button>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -815,4 +795,73 @@ export function BespokeStudioView() {
       />
     </div>
   )
+}
+
+const STAGE_STYLES: Partial<Record<CustomDesignStatus, string>> = {
+  IN_PRODUCTION: 'bg-purple-500/15 border-purple-500/30 text-purple-700 dark:text-purple-300',
+  APPROVED: 'bg-emerald-500/15 border-emerald-500/30 text-emerald-700 dark:text-emerald-300',
+  COMPLETED: 'bg-teal-500/15 border-teal-500/30 text-teal-700 dark:text-teal-300',
+  SUBMITTED: 'bg-blue-500/15 border-blue-500/30 text-blue-700 dark:text-blue-300',
+  IN_REVIEW: 'bg-amber-500/15 border-amber-500/30 text-amber-800 dark:text-amber-300',
+  REJECTED: 'bg-red-500/15 border-red-500/30 text-red-700 dark:text-red-300',
+}
+
+function StageBadge({ status }: { status: CustomDesignStatus }) {
+  return (
+    <span
+      className={`shrink-0 inline-flex items-center text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full font-medium border whitespace-nowrap ${
+        STAGE_STYLES[status] || 'bg-black/5 dark:bg-white/5 adm-border adm-text-muted'
+      }`}
+    >
+      {status.replace(/_/g, ' ').toLowerCase()}
+    </span>
+  )
+}
+
+function DesignThumb({ src, alt, size = 'md' }: { src: string; alt: string; size?: 'md' | 'lg' }) {
+  return (
+    <span
+      className={`${size === 'lg' ? 'w-16 h-16' : 'w-12 h-12'} block rounded-xl overflow-hidden border adm-border bg-slate-100 dark:bg-white/5 shrink-0`}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt={alt}
+        className="w-full h-full object-cover"
+        onError={(e) => {
+          const target = e.target as HTMLImageElement
+          if (!target.src.includes('unifort-tumbler-light.jpg')) target.src = '/products/unifort-tumbler-light.jpg'
+        }}
+      />
+    </span>
+  )
+}
+
+function DesignBadges({ design }: { design: CustomDesignItem }) {
+  if (!design.customerInstructions && !design.orders?.length) return null
+  return (
+    <span className="mt-1.5 flex flex-wrap gap-1">
+      {design.customerInstructions && (
+        <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-900">Has instructions</span>
+      )}
+      {design.orders?.map((o) => (
+        <span key={o.id} className="rounded-full bg-[#424a70]/10 px-1.5 py-0.5 text-[10px] font-mono text-[#424a70] dark:text-indigo-200">
+          {o.orderNumber}
+        </span>
+      ))}
+    </span>
+  )
+}
+
+function designProductLine(design: CustomDesignItem) {
+  const model = design.product?.modelType || design.modelType
+  return [design.product?.name, model && model.charAt(0).toUpperCase() + model.slice(1), design.finish && `${design.finish} glaze`]
+    .filter(Boolean)
+    .join(' · ')
+}
+
+function formatShortDate(iso?: string) {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
 }
